@@ -14,3 +14,15 @@ spring:
 
 server:
   port: 8080
+
+app:
+  deepseek:
+    api-key: ${DEEPSEEK_API_KEY:}
+    base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com/v1}
+    model: ${DEEPSEEK_MODEL:deepseek-v4-flash}
+    timeout: ${DEEPSEEK_TIMEOUT:60s}
+  chat:
+    message-max-length: ${CHAT_MESSAGE_MAX_LENGTH:4000}
+    memory:
+      max-messages: ${CHAT_MEMORY_MAX_MESSAGES:20}
+      ttl: ${CHAT_MEMORY_TTL:24h}

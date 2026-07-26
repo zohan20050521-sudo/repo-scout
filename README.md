@@ -30,14 +30,22 @@
 
 - JDK 17
 - Maven 3.9+(或直接使用项目自带的 `./mvnw`)
-- MySQL、Redis 可选:v0.1 的连接为惰性初始化,健康检查不探测外部依赖,未启动 MySQL/Redis 也能运行与测试
+- Redis:对话接口 `/api/chat` 的会话记忆依赖 Redis,使用该接口前需启动
+- MySQL 可选:连接为惰性初始化,健康检查不探测外部依赖;构建与测试不需要 MySQL/Redis
 
 ### 环境变量
 
-均有本地默认值,本地快速体验可全部不设;连接真实 MySQL/Redis 时按需覆盖:
+除 `DEEPSEEK_API_KEY` **必填**(缺失时应用启动即失败并给出提示)外,其余均有默认值:
 
 | 变量 | 说明 | 默认值 |
 | --- | --- | --- |
+| `DEEPSEEK_API_KEY` | **必填**,DeepSeek API Key | 无 |
+| `DEEPSEEK_BASE_URL` | DeepSeek OpenAI 兼容端点 | `https://api.deepseek.com/v1` |
+| `DEEPSEEK_MODEL` | 对话模型名(可选 `deepseek-v4-pro`) | `deepseek-v4-flash` |
+| `DEEPSEEK_TIMEOUT` | 模型调用超时 | `60s` |
+| `CHAT_MESSAGE_MAX_LENGTH` | 单条用户消息最大字符数 | `4000` |
+| `CHAT_MEMORY_MAX_MESSAGES` | 会话记忆窗口(消息条数) | `20` |
+| `CHAT_MEMORY_TTL` | 会话记忆过期时间 | `24h` |
 | `MYSQL_HOST` | MySQL 主机 | `localhost` |
 | `MYSQL_PORT` | MySQL 端口 | `3306` |
 | `MYSQL_DB` | MySQL 数据库名 | `repo_scout` |
@@ -57,6 +65,11 @@ mvn spring-boot:run
 curl http://localhost:8080/api/health
 # → {"status":"UP","application":"repo-scout"}
 
+# 对话(需已设置 DEEPSEEK_API_KEY 并启动 Redis,详见 docs/api.md)
+curl -s -X POST http://localhost:8080/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "用一句话介绍你自己"}'
+
 # 构建并运行测试
 mvn -B verify
 ```
@@ -72,7 +85,7 @@ mvn -B verify
 | v0.3 | 文档向量化 + RAG 问答、仓库分析报告 | 规划中 |
 | v0.4 | 效果评估、Docker 部署、文档收尾 | 规划中 |
 
-详细需求见 [docs/requirements.md](docs/requirements.md)。
+详细需求见 [docs/requirements.md](docs/requirements.md),API 契约见 [docs/api.md](docs/api.md)。
 
 ## License
 
