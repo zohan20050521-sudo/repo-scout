@@ -2,7 +2,7 @@
 
 > 本文档为设计基线,随实现迭代更新。
 
-- 版本:v0.3(v0.3 向量化入库落地)
+- 版本:v0.3(v0.3 RAG 检索接入对话与仓库导读报告落地)
 - 日期:2026-07-26
 - 状态:待评审
 - 关联文档:[需求文档 requirements.md](requirements.md)
@@ -188,14 +188,25 @@ flowchart LR
 
 ### 3.5 rag(v0.3)
 
-本期落地 **FR-3.1 向量化入库管道**;相似度检索接入对话、来源引用与分析报告(FR-3.2/FR-3.3)留待后续任务书。
+v0.3 分两步落地:先交付 **FR-3.1 向量化入库管道**,再交付 **FR-3.2 检索接入对话与来源引用、FR-3.3 仓库导读报告**(设计基线见 3.5.1)。
 
 管道分四段,由 `IndexingService` 同步编排(个人项目,受拉取上限约束,耗时可接受),触发端点见下:
 
 1. **文档拉取(`DocumentFetcher`)**:复用 `GithubApiClient`(只消费 `getJson`/`getRaw`,不改其行为)。范围**硬编码**——README(`/repos/{o}/{n}/readme`,raw)+ `docs/` 目录下扩展名白名单文件(`.md/.markdown/.txt/.adoc/.rst`,经递归目录树解析 blob 路径过滤)。上限:最多 `app.rag.max-files` 个文件(README 计入,超出按路径字典序截断),单文件超 `app.rag.max-file-bytes` 跳过。失败策略:README 或单个 docs 文件拉取失败记 WARN 跳过(尽量索引其余);**目录树整体拉取失败**则抛 `GithubUnavailableException`/`GithubRateLimitException`,由端点映射 502。
 2. **切分(`DocumentChunker`)**:用 langchain4j `DocumentSplitters.recursive(chunkSize, chunkOverlap)`(字符版)按 `app.rag.chunk-size`(默认 400)/`chunk-overlap`(默认 80)切分,保留 `file_path` 与文件内递增 `chunk_index`。chunk 取偏小:bge 输入上限 512 token、中文单字常 >1 token,过大易在向量化时截断丢信息。
 3. **向量化(`bge-small-zh` 量化模型)**:进程内 ONNX 推理(`BgeSmallZhQuantizedEmbeddingModel`,自带权重、无外网),`embedAll` 批量向量化;输出维度 512,不硬编码进表结构。
-4. **入库(`RepoVectorStore` 抽象)**:`replaceRepoChunks` **先删该 repo 旧块再批量插**(同一事务),天然幂等——重复索引不产生重复数据(唯一键 `(repo_id, file_path, chunk_index)` 兜底)。`search(repoId, queryVector, topK)` 加载单仓库全部块(百级规模)在进程内算**余弦相似度**、降序取 topK,本期提供但不接入对话(供 FR-3.2 消费)。
+4. **入库(`RepoVectorStore` 抽象)**:`replaceRepoChunks` **先删该 repo 旧块再批量插**(同一事务),天然幂等——重复索引不产生重复数据(唯一键 `(repo_id, file_path, chunk_index)` 兜底)。`search(repoId, queryVector, topK)` 加载单仓库全部块(百级规模)在进程内算**余弦相似度**、降序取 topK,由 FR-3.2/FR-3.3 消费(见下)。
+
+#### 3.5.1 检索接入对话与仓库导读报告(FR-3.2/FR-3.3)
+
+把 FR-3.1 的检索能力接入对话链路,并新增导读报告端点。关键决策:
+
+- **双引擎协同**:检索注入(文档语义)与 v0.2 工具调用(实时结构化数据)并存——绑定会话的系统提示词指引模型「优先依据注入的文档摘录作答并注明来源;需要实时/结构化数据时用工具;两者都取不到依据时如实说明,不编造」。
+- **检索注入走 langchain4j RAG 抽象**:自定义 `ContentRetriever`(`ChatContentRetriever`,从 query metadata 取 chatMemoryId 查会话绑定,未绑定返回空、零成本)+ 自定义 `ContentInjector`(`ChatContentInjector`,空命中原样返回原消息、零改写,保证 v0.1/v0.2 行为零回归;非空则在原用户消息后追加带来源路径的摘录区),用 `DefaultRetrievalAugmentor` 组装挂到单例 AiServices——与「ToolProvider 动态挂载」同一套框架机制,注入按会话动态生效。
+- **检索核心复用**:`RepoRetriever` 供 chat 与 report 共用,顺序固定:未建索引(`existsByRepoId` 为 false)直接空返回、**不触碰 EmbeddingModel**(CI 不加载 ONNX 模型、未索引仓库优雅降级的关键);查询侧 embed 前拼接 bge 官方查询指令前缀(文档入库侧不加);检索后按 `min-score`(余弦相似度阈值,默认 0.5,`RAG_MIN_SCORE`)过滤,条数由 `top-k`(默认 4,`RAG_TOP_K`)控制。EmbeddingModel 注入点与 IndexingService 同款 `@Lazy`。
+- **`sources` 字段**:`POST /api/chat` 响应新增 `sources`(string[]),从 `Result.sources()` 提取本轮**实际注入**的检索来源文件路径,去重、保持检索得分降序;未绑定/未索引/无命中为 `[]`,永不为 null。答案内文的出处标注给人读,`sources` 给程序用(v0.4 评测直接消费)。
+- **报告确定性取数 + 单次 LLM 调用**:`POST /api/repos/{id}/report` 由 `ReportService` 同步生成,**不经过 Assistant/会话/记忆**(一次性任务不需要记忆;确定性取数成本可控、可测试)——服务端直接实例化四个 GitHub 工具按默认参数取数(复用工具内置裁剪与失败降级文本,GitHub 故障不产生 502),加上 `RepoRetriever` 对固定查询集(定位/上手/架构)的摘录(按 `(filePath, chunkIndex)` 去重合并),拼成单条消息交 LLM 输出五个固定二级标题的 Markdown(项目定位/技术栈/目录结构解读/上手指引/近期动向)。服务端校验五节齐全且非空,不合规追加纠正指令重试一次,仍不合规照常返回并记 WARN。
+- **未索引降级,不自动索引**:绑定会话未建索引时 chat 退化为纯工具模式(`sources=[]`),report 摘录区标注未索引;**不做**绑定时/报告前自动索引——对话延迟可控、不隐式放大 GitHub 调用、索引保持显式生命周期步骤(v0.4 评测可复现)。建议先 `POST /api/repos/{id}/index` 再问答/生成报告。
 
 ---
 

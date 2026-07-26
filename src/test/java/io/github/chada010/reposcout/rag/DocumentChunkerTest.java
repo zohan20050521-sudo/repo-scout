@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DocumentChunkerTest {
 
     private static RagProperties props(int chunkSize, int chunkOverlap) {
-        return new RagProperties(30, 100000, chunkSize, chunkOverlap);
+        return new RagProperties(30, 100000, chunkSize, chunkOverlap, 4, 0.5);
     }
 
     @Test

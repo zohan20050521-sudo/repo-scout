@@ -13,12 +13,14 @@ import org.springframework.web.bind.annotation.RestController;
 import io.github.chada010.reposcout.controller.dto.IndexResponse;
 import io.github.chada010.reposcout.controller.dto.RepoOnboardRequest;
 import io.github.chada010.reposcout.controller.dto.RepoResponse;
+import io.github.chada010.reposcout.controller.dto.ReportResponse;
 import io.github.chada010.reposcout.rag.IndexingService;
 import io.github.chada010.reposcout.service.RepoService;
+import io.github.chada010.reposcout.service.ReportService;
 
 /**
- * 仓库接入与查询接口(FR-2.1),v0.3 起兼向量化索引触发(FR-3.1)。契约见 docs/api.md:
- * 创建与重复接入均返回 200,重复接入幂等(同 id,刷新元信息)。
+ * 仓库接入与查询接口(FR-2.1),v0.3 起兼向量化索引触发(FR-3.1)与导读报告生成(FR-3.3)。
+ * 契约见 docs/api.md:创建与重复接入均返回 200,重复接入幂等(同 id,刷新元信息)。
  */
 @RestController
 @RequestMapping("/api")
@@ -26,10 +28,13 @@ public class RepoController {
 
     private final RepoService repoService;
     private final IndexingService indexingService;
+    private final ReportService reportService;
 
-    public RepoController(RepoService repoService, IndexingService indexingService) {
+    public RepoController(RepoService repoService, IndexingService indexingService,
+                          ReportService reportService) {
         this.repoService = repoService;
         this.indexingService = indexingService;
+        this.reportService = reportService;
     }
 
     @PostMapping("/repos")
@@ -56,5 +61,15 @@ public class RepoController {
     @PostMapping("/repos/{id}/index")
     public IndexResponse index(@PathVariable long id) {
         return IndexResponse.of(id, indexingService.index(id));
+    }
+
+    /**
+     * 生成仓库导读报告(FR-3.3):服务端确定性取数(四个工具 + 固定查询摘录)后
+     * 单次 LLM 生成,同步返回,不经会话/记忆。仓库未接入 → 404 REPO_NOT_FOUND;
+     * LLM 失败 → 502 LLM_UNAVAILABLE;GitHub 故障不产生 502(工具层降级为可读文本)。
+     */
+    @PostMapping("/repos/{id}/report")
+    public ReportResponse report(@PathVariable long id) {
+        return ReportResponse.of(id, reportService.generate(id));
     }
 }

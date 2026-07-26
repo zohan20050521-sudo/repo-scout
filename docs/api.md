@@ -60,6 +60,11 @@ v0.2 起支持**绑定仓库**(FR-2.3):会话携带已接入仓库的 `repoId` �
 GitHub 工具(目录树、README、issues、最近提交)取仓库实时数据作答;未绑定的会话保持
 v0.1 纯对话行为(不挂工具)。
 
+v0.3 起绑定仓库的会话支持 **RAG 检索注入**(FR-3.2):若该仓库已建文档索引
+(见 `POST /api/repos/{id}/index`),服务端按用户问题自动检索相关文档块注入上下文,
+回答附引用来源(响应新增 `sources` 字段);未建索引时自动退化为纯工具模式,不报错。
+**建议先 `POST /api/repos/{id}/index` 再问答,以获得带出处的最佳效果。**
+
 ### 请求体
 
 | 字段 | 类型 | 必填 | 约束 |
@@ -86,9 +91,16 @@ v0.1 纯对话行为(不挂工具)。
 ```json
 {
   "sessionId": "0f14d0ab-9605-4a62-a9e4-5ed26688389b",
-  "answer": "模型回答文本"
+  "answer": "模型回答文本",
+  "sources": ["docs/api.md", "README.md"]
 }
 ```
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `sessionId` | string | 会话 ID(请求未携带时为服务端新生成) |
+| `answer` | string | 模型回答文本 |
+| `sources` | string[] | 本轮**实际注入**的检索来源文件路径,去重、按检索得分降序;未绑定/未索引/无命中为 `[]`(永不为 null)。答案还可能来自工具调用,`sources` 只反映检索注入 |
 
 ### 错误
 
@@ -264,6 +276,70 @@ curl -s -X POST http://localhost:8080/api/repos/1/index
 # 未接入的 id
 curl -s -X POST http://localhost:8080/api/repos/999999/index
 # → 404 {"code":"REPO_NOT_FOUND","message":"仓库未接入或不存在:id=999999"}
+```
+
+---
+
+## POST /api/repos/{id}/report
+
+生成该仓库的**结构化导读报告**(FR-3.3):服务端确定性取数(四个 GitHub 工具按默认参数各调一次
++ 对已索引文档按固定查询集检索摘录),单次 LLM 调用生成 Markdown 报告,**不经过会话/记忆**。
+
+- **同步执行**:请求在报告生成完成后才返回;耗时主要在 LLM 生成(参考非功能预期 30 秒内)。
+- 报告固定包含五个二级小节,顺序固定:`## 项目定位`、`## 技术栈`、`## 目录结构解读`、
+  `## 上手指引`、`## 近期动向`。服务端校验五节齐全且非空,不合规会追加纠正指令重试一次,
+  仍不合规照常返回(记服务端 WARN)。
+- 该仓库未建文档索引时报告仍可生成(摘录区标注未索引);**建议先
+  `POST /api/repos/{id}/index`** 让「上手指引」等小节能引用文档摘录并注明来源路径。
+
+### 路径参数
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | number | 已接入仓库的 id(见 `POST /api/repos`) |
+
+### 响应 `200 OK`
+
+```json
+{
+  "repoId": 1,
+  "generatedAt": "2026-07-26T12:00:00",
+  "costMs": 12450,
+  "report": "## 项目定位\n……\n## 技术栈\n……\n## 目录结构解读\n……\n## 上手指引\n……\n## 近期动向\n……"
+}
+```
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `repoId` | number | 仓库 id |
+| `generatedAt` | string | 报告生成时间(截断到秒) |
+| `costMs` | number | 本次生成总耗时(毫秒,含取数与 LLM 调用) |
+| `report` | string | 报告 Markdown 全文(五个固定小节) |
+
+### 错误
+
+| 场景 | 状态码 | code |
+| --- | --- | --- |
+| `id` 非数字 | 400 | `INVALID_PARAM` |
+| 仓库未接入/不存在(message「仓库未接入或不存在」) | 404 | `REPO_NOT_FOUND` |
+| DeepSeek 超时/限流/鉴权失败 | 502 | `LLM_UNAVAILABLE` |
+
+说明:**GitHub 故障不返回 502**——四个工具的数据获取失败时降级为一行可读文本进入提示词,
+报告仍会生成,并在对应小节如实说明数据缺失。
+
+### 示例
+
+```bash
+# 建议先索引(摘录区才有内容),再生成报告
+curl -s -X POST http://localhost:8080/api/repos/1/index
+curl -s -X POST http://localhost:8080/api/repos/1/report
+# → {"repoId":1,"generatedAt":"2026-07-26T12:00:00","costMs":12450,"report":"## 项目定位\n……"}
+
+# 未接入 / id 非数字
+curl -s -X POST http://localhost:8080/api/repos/999999/report
+# → 404 {"code":"REPO_NOT_FOUND","message":"仓库未接入或不存在:id=999999"}
+curl -s -X POST http://localhost:8080/api/repos/abc/report
+# → 400 {"code":"INVALID_PARAM","message":"参数 id 类型不合法"}
 ```
 
 ---

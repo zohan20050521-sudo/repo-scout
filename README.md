@@ -52,6 +52,8 @@
 | `RAG_MAX_FILE_BYTES` | 单个文档字节数上限,超出跳过不索引 | `100000` |
 | `RAG_CHUNK_SIZE` | 文档切分块大小(字符) | `400` |
 | `RAG_CHUNK_OVERLAP` | 相邻块重叠字符数 | `80` |
+| `RAG_TOP_K` | 每次检索返回的文档块条数(对话注入与报告摘录共用) | `4` |
+| `RAG_MIN_SCORE` | 检索命中的余弦相似度过滤阈值(低于则不注入) | `0.5` |
 | `GITHUB_TOKEN` | GitHub API 鉴权 token(留空为匿名,限流阈值低) | 空 |
 | `GITHUB_BASE_URL` | GitHub API 端点 | `https://api.github.com` |
 | `GITHUB_TIMEOUT` | GitHub API 连接与读超时 | `10s` |
@@ -123,6 +125,27 @@ curl -s -X POST http://localhost:8080/api/repos/1/index
 
 拉取范围(README + `docs/` + 扩展名白名单)与上限、切分粒度见上方 `RAG_*` 环境变量;
 接口契约与错误表详见 [docs/api.md](docs/api.md)。
+
+### RAG 问答与仓库导读报告(v0.3)
+
+**建议先对仓库执行上面的 `POST /api/repos/{id}/index` 再问答/生成报告,以获得最佳效果。**
+
+绑定已索引仓库的会话中,服务端会按问题自动检索文档块注入上下文,回答附引用来源
+(`sources` 为本轮注入的来源文件路径;未索引/无命中时自动退化为纯工具问答,`sources` 为 `[]`):
+
+```bash
+# RAG 问答:回答基于文档摘录并注明出处
+curl -s -X POST http://localhost:8080/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "这个项目的统一错误码有哪些?", "repoId": 1}'
+# → {"sessionId":"<uuid>","answer":"根据 docs/api.md,统一错误码包括……","sources":["docs/api.md"]}
+
+# 一键生成仓库导读报告(五个固定小节:项目定位/技术栈/目录结构解读/上手指引/近期动向)
+curl -s -X POST http://localhost:8080/api/repos/1/report
+# → {"repoId":1,"generatedAt":"2026-07-26T12:00:00","costMs":12450,"report":"## 项目定位\n……"}
+```
+
+检索条数与相似度阈值由 `RAG_TOP_K` / `RAG_MIN_SCORE` 控制(见上方环境变量表)。
 
 ## Docker 一键启动
 
