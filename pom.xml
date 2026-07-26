@@ -43,6 +43,17 @@
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-open-ai</artifactId>
         </dependency>
+        <!--
+            进程内量化 bge-small-zh 嵌入模型:自带 ONNX 权重与 tokenizer,无外网、CI 可跑。
+            该模块走独立版本线,不受上方 langchain4j-bom(1.18.0)管理,故显式写死 version;
+            其对 langchain4j-core 的传递依赖仍由 BOM 归一到 1.18.0,与全局核心版本一致。
+            1.x 线仅以 -beta 发布(无 1.x 正式版),取当前最新以对齐 1.x 核心。
+        -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-embeddings-bge-small-zh-q</artifactId>
+            <version>1.9.0-beta16</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>

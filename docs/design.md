@@ -2,7 +2,7 @@
 
 > 本文档为设计基线,随实现迭代更新。
 
-- 版本:v0.2(v0.2 契约细化)
+- 版本:v0.3(v0.3 向量化入库落地)
 - 日期:2026-07-26
 - 状态:待评审
 - 关联文档:[需求文档 requirements.md](requirements.md)
@@ -69,7 +69,7 @@ flowchart LR
     subgraph Store["存储"]
         Redis[("Redis<br/>会话记忆")]
         MySQL[("MySQL<br/>业务数据(v0.2 起建表)")]
-        Vector[("向量库<br/>(v0.3 起,选型待定)")]
+        Vector[("向量库<br/>(v0.3 起,MySQL doc_chunk)")]
     end
 
     Client -->|"REST / JSON"| Controller
@@ -186,9 +186,16 @@ flowchart LR
 - **会话-仓库绑定存储**:每会话一个 Redis STRING 键 `repo-scout:chat:repo:{sessionId}`,值为 repoId;与会话记忆**同 TTL**(复用 `app.chat.memory.ttl`),每轮对话刷新,过期后需重新携带 repoId 绑定。绑定三态(首绑校验存在性→404、冲突→400、同/不传→沿用)在对话服务内校验。独立小类封装,不与会话记忆存储混用。
 - **轮数上限与轨迹日志**:单次问答工具调用轮数上限由 `app.agent.max-tool-rounds`(默认 5,`AGENT_MAX_TOOL_ROUNDS`)控制。实现用包装 `ToolExecutor` 计数:达到上限后不再执行真实工具,返回一行可读文本让模型基于已有信息收尾(优雅、可读、不死循环),而非依赖框架 `maxSequentialToolsInvocations`(该参数超限即抛异常,无法「让模型收尾」,仅作防跑飞硬兜底,取值高于业务上限)。同一包装器按 INFO 级记录调用轨迹(sessionId、工具名、参数摘要 ≤200 字符、耗时、结果长度);**用户消息全文与工具完整返回不进 INFO**。
 
-### 3.5 rag(v0.3,概要)
+### 3.5 rag(v0.3)
 
-文档切分与 `bge-small-zh` 向量化入库(FR-3.1)、相似度检索与上下文注入(FR-3.2),支撑 RAG 问答与仓库分析报告(FR-3.3)。进入 v0.3 前细化。
+本期落地 **FR-3.1 向量化入库管道**;相似度检索接入对话、来源引用与分析报告(FR-3.2/FR-3.3)留待后续任务书。
+
+管道分四段,由 `IndexingService` 同步编排(个人项目,受拉取上限约束,耗时可接受),触发端点见下:
+
+1. **文档拉取(`DocumentFetcher`)**:复用 `GithubApiClient`(只消费 `getJson`/`getRaw`,不改其行为)。范围**硬编码**——README(`/repos/{o}/{n}/readme`,raw)+ `docs/` 目录下扩展名白名单文件(`.md/.markdown/.txt/.adoc/.rst`,经递归目录树解析 blob 路径过滤)。上限:最多 `app.rag.max-files` 个文件(README 计入,超出按路径字典序截断),单文件超 `app.rag.max-file-bytes` 跳过。失败策略:README 或单个 docs 文件拉取失败记 WARN 跳过(尽量索引其余);**目录树整体拉取失败**则抛 `GithubUnavailableException`/`GithubRateLimitException`,由端点映射 502。
+2. **切分(`DocumentChunker`)**:用 langchain4j `DocumentSplitters.recursive(chunkSize, chunkOverlap)`(字符版)按 `app.rag.chunk-size`(默认 400)/`chunk-overlap`(默认 80)切分,保留 `file_path` 与文件内递增 `chunk_index`。chunk 取偏小:bge 输入上限 512 token、中文单字常 >1 token,过大易在向量化时截断丢信息。
+3. **向量化(`bge-small-zh` 量化模型)**:进程内 ONNX 推理(`BgeSmallZhQuantizedEmbeddingModel`,自带权重、无外网),`embedAll` 批量向量化;输出维度 512,不硬编码进表结构。
+4. **入库(`RepoVectorStore` 抽象)**:`replaceRepoChunks` **先删该 repo 旧块再批量插**(同一事务),天然幂等——重复索引不产生重复数据(唯一键 `(repo_id, file_path, chunk_index)` 兜底)。`search(repoId, queryVector, topK)` 加载单仓库全部块(百级规模)在进程内算**余弦相似度**、降序取 topK,本期提供但不接入对话(供 FR-3.2 消费)。
 
 ---
 
@@ -269,10 +276,26 @@ sequenceDiagram
   );
   ```
 
+- v0.3 起:`doc_chunk` 表存放文档切分、向量化后的块(FR-3.1)。`embedding` 存 float[] 的 JSON 数组文本(维度不硬编码进列类型),`(repo_id, file_path, chunk_index)` 唯一支撑幂等重建。DDL 摘要(`V2__create_doc_chunk_table.sql`):
+
+  ```sql
+  CREATE TABLE doc_chunk (
+      id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+      repo_id     BIGINT       NOT NULL,
+      file_path   VARCHAR(500) NOT NULL,
+      chunk_index INT          NOT NULL,
+      content     TEXT         NOT NULL,
+      embedding   MEDIUMTEXT   NOT NULL,   -- 向量 JSON 数组文本(float[])
+      created_at  DATETIME     NOT NULL,
+      CONSTRAINT uk_doc_chunk UNIQUE (repo_id, file_path, chunk_index)
+  );
+  CREATE INDEX idx_doc_chunk_repo ON doc_chunk (repo_id);
+  ```
+
 ### 5.3 向量库:文档向量(v0.3 起)
 
 - 存放仓库文档切分、向量化后的文档块,支持按相似度检索(FR-3.1、FR-3.2)。
-- 具体选型「待定」,进入 v0.3 前细化。
+- **选型收口**:向量持久化进 MySQL `doc_chunk` 表(见 5.2),`embedding` 以 float[] 的 JSON 数组文本存储;检索为进程内暴力扫描——加载单仓库全部块算余弦相似度、降序取 topK。文档块百级规模,进程内检索足够快且免运维,不引入专用向量库/插件。存储层抽象为 `RepoVectorStore` 接口(自实现,不套 langchain4j `EmbeddingStore`),便于日后数据规模变大时换专用向量库而不动上层。
 
 ---
 

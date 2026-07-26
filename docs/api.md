@@ -1,6 +1,6 @@
 # repo-scout API 文档
 
-- 版本:v0.2
+- 版本:v0.3
 - Base URL:`http://localhost:8080`
 - 认证:一期不做鉴权,仅限本地/内网环境使用
 
@@ -205,6 +205,65 @@ curl -s -X POST http://localhost:8080/api/repos \
   -H 'Content-Type: application/json' \
   -d '{"repo": "https://gitlab.com/a/b"}'
 # → 400 {"code":"INVALID_PARAM","message":"repo 格式不合法:仅支持 owner/repo 或 https://github.com/owner/repo(URL 允许尾部 / 或 .git)"}
+```
+
+---
+
+## POST /api/repos/{id}/index
+
+触发对已接入仓库的**文档向量化入库**(FR-3.1):拉取该仓库 README 与 `docs/` 目录下的文本文档
+(扩展名白名单 `.md/.markdown/.txt/.adoc/.rst`),切分、进程内 `bge-small-zh` 向量化后存入 `doc_chunk` 表。
+
+- **同步执行**:请求在索引完成后才返回;耗时受拉取上限(默认最多 30 个文件、单文件 100KB)约束。
+- **幂等重建**:重复调用会先删该仓库旧块再整体重建,`doc_chunk` 总数不因重复调用增长。
+- 服务端默认匿名调用 GitHub API(限流阈值较低,索引会拉多个文件);设置 `GITHUB_TOKEN` 阈值更高。
+- 拉取范围与上限由服务端配置(`RAG_*`,见 README),不经请求参数。
+
+### 路径参数
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | number | 已接入仓库的 id(见 `POST /api/repos`) |
+
+### 响应 `200 OK`
+
+```json
+{
+  "repoId": 1,
+  "fileCount": 8,
+  "chunkCount": 63,
+  "costMs": 2450
+}
+```
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `repoId` | number | 被索引的仓库 id |
+| `fileCount` | number | 实际拉取并索引的文档数(README 计入) |
+| `chunkCount` | number | 切分并入库的文档块总数 |
+| `costMs` | number | 本次索引总耗时(毫秒) |
+
+### 错误
+
+| 场景 | 状态码 | code |
+| --- | --- | --- |
+| `id` 非数字 | 400 | `INVALID_PARAM` |
+| 仓库未接入/不存在(message「仓库未接入或不存在」) | 404 | `REPO_NOT_FOUND` |
+| 拉取目录树时 GitHub 网络错误/超时/5xx | 502 | `GITHUB_UNAVAILABLE` |
+| 拉取目录树时 GitHub 限流(message 明确提示限流) | 502 | `GITHUB_UNAVAILABLE` |
+
+说明:README 或单个 docs 文件拉取失败会被跳过(不致命),不影响整体成功;只有**目录树整体**拉取失败才返回 502。
+
+### 示例
+
+```bash
+# 先接入仓库拿到 id,再触发索引
+curl -s -X POST http://localhost:8080/api/repos/1/index
+# → {"repoId":1,"fileCount":8,"chunkCount":63,"costMs":2450}
+
+# 未接入的 id
+curl -s -X POST http://localhost:8080/api/repos/999999/index
+# → 404 {"code":"REPO_NOT_FOUND","message":"仓库未接入或不存在:id=999999"}
 ```
 
 ---

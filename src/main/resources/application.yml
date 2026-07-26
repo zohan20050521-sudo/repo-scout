@@ -42,3 +42,8 @@ app:
     commits-max: 20
   agent:
     max-tool-rounds: ${AGENT_MAX_TOOL_ROUNDS:5}
+  rag:
+    max-files: ${RAG_MAX_FILES:30}
+    max-file-bytes: ${RAG_MAX_FILE_BYTES:100000}
+    chunk-size: ${RAG_CHUNK_SIZE:400}
+    chunk-overlap: ${RAG_CHUNK_OVERLAP:80}

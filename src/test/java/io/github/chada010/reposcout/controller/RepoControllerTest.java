@@ -16,6 +16,8 @@ import io.github.chada010.reposcout.exception.GithubRateLimitException;
 import io.github.chada010.reposcout.exception.GithubUnavailableException;
 import io.github.chada010.reposcout.exception.InvalidParamException;
 import io.github.chada010.reposcout.exception.RepoNotFoundException;
+import io.github.chada010.reposcout.rag.IndexResult;
+import io.github.chada010.reposcout.rag.IndexingService;
 import io.github.chada010.reposcout.service.RepoService;
 
 import static org.hamcrest.Matchers.containsString;
@@ -36,6 +38,9 @@ class RepoControllerTest {
 
     @MockitoBean
     private RepoService repoService;
+
+    @MockitoBean
+    private IndexingService indexingService;
 
     private Repo repo(long id, String owner, String name) {
         Repo repo = new Repo(owner, name, "master", "My first repo",
@@ -171,5 +176,38 @@ class RepoControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_PARAM"))
                 .andExpect(jsonPath("$.message").value(containsString("id")));
+    }
+
+    @Test
+    void indexSuccessReturnsCounts() throws Exception {
+        given(indexingService.index(1L)).willReturn(new IndexResult(3, 12, 456L));
+
+        mockMvc.perform(post("/api/repos/1/index"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.repoId").value(1))
+                .andExpect(jsonPath("$.fileCount").value(3))
+                .andExpect(jsonPath("$.chunkCount").value(12))
+                .andExpect(jsonPath("$.costMs").value(456));
+    }
+
+    @Test
+    void indexOnMissingRepoReturns404WithRepoNotFound() throws Exception {
+        given(indexingService.index(999999L))
+                .willThrow(new RepoNotFoundException("仓库未接入或不存在:id=999999"));
+
+        mockMvc.perform(post("/api/repos/999999/index"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("REPO_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value(containsString("仓库未接入或不存在")));
+    }
+
+    @Test
+    void indexWhenGithubUnavailableReturns502() throws Exception {
+        given(indexingService.index(1L))
+                .willThrow(new GithubUnavailableException("GitHub 服务暂时不可用,请稍后重试"));
+
+        mockMvc.perform(post("/api/repos/1/index"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code").value("GITHUB_UNAVAILABLE"));
     }
 }

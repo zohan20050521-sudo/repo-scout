@@ -48,6 +48,10 @@
 | `CHAT_MEMORY_MAX_MESSAGES` | 会话记忆窗口(消息条数) | `20` |
 | `CHAT_MEMORY_TTL` | 会话记忆与仓库绑定过期时间 | `24h` |
 | `AGENT_MAX_TOOL_ROUNDS` | 单次问答工具调用轮数上限(防循环) | `5` |
+| `RAG_MAX_FILES` | 单次向量化索引最多拉取的文档数(README 计入) | `30` |
+| `RAG_MAX_FILE_BYTES` | 单个文档字节数上限,超出跳过不索引 | `100000` |
+| `RAG_CHUNK_SIZE` | 文档切分块大小(字符) | `400` |
+| `RAG_CHUNK_OVERLAP` | 相邻块重叠字符数 | `80` |
 | `GITHUB_TOKEN` | GitHub API 鉴权 token(留空为匿名,限流阈值低) | 空 |
 | `GITHUB_BASE_URL` | GitHub API 端点 | `https://api.github.com` |
 | `GITHUB_TIMEOUT` | GitHub API 连接与读超时 | `10s` |
@@ -103,6 +107,22 @@ curl -s -X POST http://localhost:8080/api/chat \
 ```
 
 绑定语义(首绑校验存在性、冲突 400、过期需重绑)详见 [docs/api.md](docs/api.md)。
+
+### 触发文档向量化索引(v0.3)
+
+接入仓库后,可对其 README 与 `docs/` 文档做一次向量化入库(FR-3.1),供后续 RAG 检索使用。
+首次触发会加载进程内 `bge-small-zh` 量化模型(约 24MB,无外网);索引同步执行,幂等重建。
+
+```bash
+# 对已接入仓库(<repoId> 为 POST /api/repos 返回的 id)触发向量化索引
+curl -s -X POST http://localhost:8080/api/repos/1/index
+# → {"repoId":1,"fileCount":8,"chunkCount":63,"costMs":2450}
+
+# 重复调用为幂等重建:doc_chunk 总数不因重复触发而增长
+```
+
+拉取范围(README + `docs/` + 扩展名白名单)与上限、切分粒度见上方 `RAG_*` 环境变量;
+接口契约与错误表详见 [docs/api.md](docs/api.md)。
 
 ## Docker 一键启动
 
