@@ -40,3 +40,5 @@ app:
     readme-max-chars: 8000
     issues-max: 20
     commits-max: 20
+  agent:
+    max-tool-rounds: ${AGENT_MAX_TOOL_ROUNDS:5}

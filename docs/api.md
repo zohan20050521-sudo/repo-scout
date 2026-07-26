@@ -56,14 +56,30 @@ curl http://localhost:8080/api/health
 发送一条用户消息,返回模型回答。同一 `sessionId` 下多轮调用共享会话记忆
 (存 Redis,窗口截断 + 过期时间,见 README 配置项)。
 
+v0.2 起支持**绑定仓库**(FR-2.3):会话携带已接入仓库的 `repoId` 后,Agent 可自主调用
+GitHub 工具(目录树、README、issues、最近提交)取仓库实时数据作答;未绑定的会话保持
+v0.1 纯对话行为(不挂工具)。
+
 ### 请求体
 
 | 字段 | 类型 | 必填 | 约束 |
 | --- | --- | --- | --- |
 | `sessionId` | string | 否 | 标准 UUID 格式(8-4-4-4-12)。为空/缺省时服务端生成新会话 |
 | `message` | string | 是 | 非空,长度 ≤ 4000 字符(可通过 `CHAT_MESSAGE_MAX_LENGTH` 调整) |
+| `repoId` | number | 否 | 已接入仓库的 id(见 `POST /api/repos`)。语义见下方「仓库绑定」 |
 
 说明:v0.1 没有会话注册表,传入**合法 UUID 但无对应历史**时不报错,按空历史开始新会话继续。
+
+### 仓库绑定(`repoId`)
+
+- **首次绑定**:未绑定会话首次携带 `repoId` → 校验该仓库已接入(否则 404 `REPO_NOT_FOUND`),
+  校验通过即将本会话绑定到该仓库,后续本会话的问答挂载该仓库的 GitHub 工具。
+- **沿用绑定**:已绑定会话再传**相同** `repoId` 或**不传**,均沿用原绑定。
+- **绑定冲突**:已绑定会话再传**不同** `repoId` → 400 `INVALID_PARAM`,提示新开会话切换。
+- **不带 `repoId` 的未绑定会话** = v0.1 纯对话,不挂工具。
+- `repoId` 类型非法(如传字符串)→ 400 `INVALID_PARAM`(JSON 解析阶段拦截)。
+- **过期**:绑定关系与会话记忆**同 TTL**(默认 24h,`CHAT_MEMORY_TTL`),每轮对话刷新;
+  过期后需重新携带 `repoId` 绑定。
 
 ### 响应 `200 OK`
 
@@ -81,6 +97,9 @@ curl http://localhost:8080/api/health
 | `message` 为空/缺省/全空白 | 400 | `INVALID_PARAM` |
 | `message` 超长 | 400 | `INVALID_PARAM` |
 | `sessionId` 非 UUID 格式 | 400 | `INVALID_PARAM` |
+| `repoId` 类型非法(非数字) | 400 | `INVALID_PARAM` |
+| 已绑定会话再传不同 `repoId`(绑定冲突) | 400 | `INVALID_PARAM` |
+| `repoId` 指向未接入/不存在的仓库 | 404 | `REPO_NOT_FOUND` |
 | DeepSeek 超时/限流/鉴权失败 | 502 | `LLM_UNAVAILABLE` |
 | 其他内部错误(如 Redis 不可用) | 500 | `INTERNAL_ERROR` |
 
@@ -97,6 +116,23 @@ curl -s -X POST http://localhost:8080/api/chat \
 curl -s -X POST http://localhost:8080/api/chat \
   -H 'Content-Type: application/json' \
   -d '{"sessionId": "<uuid>", "message": "我上一个问题是什么?"}'
+
+# 绑定仓库并提问(repoId 为 POST /api/repos 返回的 id):
+# 首次携带 repoId 完成绑定,Agent 自动调用工具基于该仓库真实数据作答
+curl -s -X POST http://localhost:8080/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"sessionId": "<uuid>", "message": "这个项目怎么在本地跑起来?", "repoId": 1}'
+
+# 同一会话后续可省略 repoId,沿用绑定;追问可用指代
+curl -s -X POST http://localhost:8080/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"sessionId": "<uuid>", "message": "刚才说的那个入口类在哪个目录?"}'
+
+# 绑定冲突示例:已绑定会话再传不同 repoId
+curl -s -X POST http://localhost:8080/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"sessionId": "<uuid>", "message": "换一个", "repoId": 2}'
+# → 400 {"code":"INVALID_PARAM","message":"会话已绑定仓库 1,如需切换请新开会话"}
 
 # 参数错误示例
 curl -s -X POST http://localhost:8080/api/chat \

@@ -142,7 +142,7 @@ flowchart LR
 - 形态:`GithubTreeTool` / `GithubReadmeTool` / `GithubIssuesTool` / `GithubCommitsTool` 四个独立类(tools 包)。**非单例 bean**:按仓库实例化,构造注入 `(GithubApiClient, ToolsProperties, RepoRef)`;方法实现期加 LangChain4j `@Tool` 注解,方法参数只含模型可见参数——repoId 一律不进模型参数,由构造时的 RepoRef 决定访问哪个仓库。
 - 签名与行为:
 
-1. `String repoTree(Integer maxDepth)`:`GET /repos/{owner}/{name}/git/trees/{defaultBranch}?recursive=1`;maxDepth 空用默认值、上限受 `tree-max-depth` 约束;输出缩进树形文本,目录带 `/` 后缀;条目超 `tree-max-entries` 截断并加尾注;GitHub 返回 `truncated=true` 同样注明。输出模板:
+1. `String repoTree(Integer maxDepth)`:`GET /repos/{owner}/{name}/git/trees/{defaultBranch}?recursive=1`;maxDepth 空用默认值、上限受 `tree-max-depth` 约束;输出缩进树形文本,目录带 `/` 后缀;条目按路径段逐段字典序排序(同层兄弟字典序、不做目录优先,子项紧跟父目录),不用纯 path 字符串字典序以免 `-`(45) < `/`(47) 把同名目录的子项拆到 `xxx-yyy` 之后;条目超 `tree-max-entries` 截断并加尾注;GitHub 返回 `truncated=true` 同样注明。输出模板:
 
    ```text
    src/
@@ -176,6 +176,15 @@ flowchart LR
    ```
 
 - 错误策略(四工具一致):捕获 GitHub 异常,**返回一行可读文本**(如「GitHub API 限流,请稍后重试」),不向上抛,保证工具失败不中断对话;详情进 WARN 日志。
+
+#### 3.4.3 Agent 编排(FR-2.3,v0.2)
+
+将四个工具接入对话链路,由 Agent 自主规划调用。关键决策:
+
+- **单例 AiServices + ToolProvider(工具挂载)**:`Assistant` 为单例 `AiServices`,工具集不在装配期固定,而是由 `ToolProvider` 按 `chatMemoryId`(即 sessionId)动态决定——未绑定仓库返回空工具集(退化为 v0.1 纯对话),已绑定则查 repo 记录构造 `RepoRef`,按仓库实例化四个工具并挂载。repoId 由服务端从绑定关系解析,不进入模型可见的工具参数。
+- **系统提示词按绑定态切换**:用 `systemMessageProvider` 而非 `@SystemMessage` 注解(注解优先级高于 provider,会屏蔽动态切换)——未绑定沿用纯对话提示;已绑定改用「可调用工具取实时数据、优先基于真实数据作答、取不到不编造」的提示。
+- **会话-仓库绑定存储**:每会话一个 Redis STRING 键 `repo-scout:chat:repo:{sessionId}`,值为 repoId;与会话记忆**同 TTL**(复用 `app.chat.memory.ttl`),每轮对话刷新,过期后需重新携带 repoId 绑定。绑定三态(首绑校验存在性→404、冲突→400、同/不传→沿用)在对话服务内校验。独立小类封装,不与会话记忆存储混用。
+- **轮数上限与轨迹日志**:单次问答工具调用轮数上限由 `app.agent.max-tool-rounds`(默认 5,`AGENT_MAX_TOOL_ROUNDS`)控制。实现用包装 `ToolExecutor` 计数:达到上限后不再执行真实工具,返回一行可读文本让模型基于已有信息收尾(优雅、可读、不死循环),而非依赖框架 `maxSequentialToolsInvocations`(该参数超限即抛异常,无法「让模型收尾」,仅作防跑飞硬兜底,取值高于业务上限)。同一包装器按 INFO 级记录调用轨迹(sessionId、工具名、参数摘要 ≤200 字符、耗时、结果长度);**用户消息全文与工具完整返回不进 INFO**。
 
 ### 3.5 rag(v0.3,概要)
 
@@ -238,6 +247,7 @@ sequenceDiagram
 - 值格式:LangChain4j `ChatMessageSerializer` 序列化的消息列表 JSON。
 - 窗口上限:记忆按消息条数设窗口上限(默认 20 条),超出后截断;上限可配置。
 - 过期策略:每个会话设置过期时间(TTL,默认 24h),每次写入刷新,过期后由 Redis 自动清理;过期时间可配置。
+- 会话-仓库绑定(v0.2 起,FR-2.3):每会话另有一个 STRING 键 `repo-scout:chat:repo:{sessionId}`,值为已接入仓库的 repoId,与会话记忆同 TTL、每轮刷新;独立于记忆键,职责分离。
 
 ### 5.2 MySQL:业务数据
 

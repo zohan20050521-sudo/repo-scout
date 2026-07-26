@@ -30,8 +30,9 @@
 
 - JDK 17
 - Maven 3.9+(或直接使用项目自带的 `./mvnw`)
-- Redis:对话接口 `/api/chat` 的会话记忆依赖 Redis,使用该接口前需启动
-- MySQL 可选:连接为惰性初始化,健康检查不探测外部依赖;构建与测试不需要 MySQL/Redis
+- **MySQL:运行必需**——应用启动时 Flyway 会执行数据库迁移(建 `repo` 表),MySQL 不可用则启动失败。仓库接入 `/api/repos` 与会话绑定也依赖它
+- **Redis:运行必需**——对话接口 `/api/chat` 的会话记忆与仓库绑定依赖 Redis,使用该接口前需启动
+- **构建与测试不需要 MySQL/Redis/外网**:测试用 H2(MySQL 兼容模式)执行同一迁移脚本,GitHub/DeepSeek 全程 mock;`./mvnw -B verify` 无需任何外部依赖
 
 ### 环境变量
 
@@ -45,7 +46,11 @@
 | `DEEPSEEK_TIMEOUT` | 模型调用超时 | `60s` |
 | `CHAT_MESSAGE_MAX_LENGTH` | 单条用户消息最大字符数 | `4000` |
 | `CHAT_MEMORY_MAX_MESSAGES` | 会话记忆窗口(消息条数) | `20` |
-| `CHAT_MEMORY_TTL` | 会话记忆过期时间 | `24h` |
+| `CHAT_MEMORY_TTL` | 会话记忆与仓库绑定过期时间 | `24h` |
+| `AGENT_MAX_TOOL_ROUNDS` | 单次问答工具调用轮数上限(防循环) | `5` |
+| `GITHUB_TOKEN` | GitHub API 鉴权 token(留空为匿名,限流阈值低) | 空 |
+| `GITHUB_BASE_URL` | GitHub API 端点 | `https://api.github.com` |
+| `GITHUB_TIMEOUT` | GitHub API 连接与读超时 | `10s` |
 | `MYSQL_HOST` | MySQL 主机 | `localhost` |
 | `MYSQL_PORT` | MySQL 端口 | `3306` |
 | `MYSQL_DB` | MySQL 数据库名 | `repo_scout` |
@@ -70,9 +75,34 @@ curl -s -X POST http://localhost:8080/api/chat \
   -H 'Content-Type: application/json' \
   -d '{"message": "用一句话介绍你自己"}'
 
-# 构建并运行测试
+# 构建并运行测试(无需 MySQL/Redis/外网)
 mvn -B verify
 ```
+
+### 接入仓库并绑定会话提问(v0.2)
+
+绑定一个已接入的仓库后,Agent 会自动调用 GitHub 工具基于仓库真实数据作答:
+
+```bash
+# 1) 接入仓库,记下返回的 id(下称 <repoId>)
+curl -s -X POST http://localhost:8080/api/repos \
+  -H 'Content-Type: application/json' \
+  -d '{"repo": "spring-projects/spring-petclinic"}'
+# → {"id":1,"owner":"spring-projects","name":"spring-petclinic",...}
+
+# 2) 首次携带 repoId 绑定会话并提问(自动生成 sessionId,记下返回值)
+curl -s -X POST http://localhost:8080/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "这个项目怎么在本地跑起来?", "repoId": 1}'
+# → {"sessionId":"<uuid>","answer":"基于 README 的运行步骤……"}
+
+# 3) 同一会话后续可省略 repoId,沿用绑定;追问可用指代
+curl -s -X POST http://localhost:8080/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"sessionId": "<uuid>", "message": "项目的目录结构大致是怎样的?"}'
+```
+
+绑定语义(首绑校验存在性、冲突 400、过期需重绑)详见 [docs/api.md](docs/api.md)。
 
 ## Docker 一键启动
 

@@ -16,8 +16,11 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -77,7 +80,7 @@ class ChatControllerTest {
 
     @Test
     void validRequestReturns200WithSessionIdAndAnswer() throws Exception {
-        given(chatService.chat(isNull(), anyString()))
+        given(chatService.chat(isNull(), anyString(), isNull()))
                 .willReturn(new ChatService.ChatResult(SESSION_ID, "你好,我是 repo-scout。"));
 
         mockMvc.perform(post("/api/chat")
@@ -89,8 +92,31 @@ class ChatControllerTest {
     }
 
     @Test
+    void repoIdIsPassedThroughToService() throws Exception {
+        given(chatService.chat(eq(SESSION_ID), anyString(), eq(7L)))
+                .willReturn(new ChatService.ChatResult(SESSION_ID, "已绑定回答"));
+
+        mockMvc.perform(post("/api/chat")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sessionId\": \"" + SESSION_ID + "\", \"message\": \"这个项目怎么跑\", \"repoId\": 7}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.answer").value("已绑定回答"));
+        verify(chatService).chat(eq(SESSION_ID), anyString(), eq(7L));
+    }
+
+    @Test
+    void nonNumericRepoIdReturns400WithInvalidParam() throws Exception {
+        mockMvc.perform(post("/api/chat")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\": \"你好\", \"repoId\": \"abc\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAM"));
+        verifyNoInteractions(chatService);
+    }
+
+    @Test
     void llmFailureReturns502WithUnifiedErrorAndNoStackTrace() throws Exception {
-        given(chatService.chat(any(), anyString()))
+        given(chatService.chat(any(), anyString(), any()))
                 .willThrow(new LangChain4jException("upstream timeout"));
 
         mockMvc.perform(post("/api/chat")
@@ -104,7 +130,7 @@ class ChatControllerTest {
 
     @Test
     void unexpectedFailureReturns500WithUnifiedError() throws Exception {
-        given(chatService.chat(any(), anyString()))
+        given(chatService.chat(any(), anyString(), any()))
                 .willThrow(new IllegalStateException("boom"));
 
         mockMvc.perform(post("/api/chat")
