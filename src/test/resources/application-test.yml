@@ -1,0 +1,9 @@
+# 测试专用数据源:H2 内存库以 MySQL 兼容模式运行,
+# Flyway 照常执行 db/migration 下的迁移脚本(顺带验证脚本本身)。
+# CI 无 MySQL/Redis/外网,测试不得依赖任何外部服务。
+spring:
+  datasource:
+    url: jdbc:h2:mem:repo-scout-test;MODE=MySQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver

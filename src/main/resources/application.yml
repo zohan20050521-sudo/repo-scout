@@ -6,6 +6,10 @@ spring:
     username: ${MYSQL_USER:root}
     password: ${MYSQL_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -26,3 +30,13 @@ app:
     memory:
       max-messages: ${CHAT_MEMORY_MAX_MESSAGES:20}
       ttl: ${CHAT_MEMORY_TTL:24h}
+  github:
+    base-url: ${GITHUB_BASE_URL:https://api.github.com}
+    token: ${GITHUB_TOKEN:}
+    timeout: ${GITHUB_TIMEOUT:10s}
+  tools:
+    tree-max-depth: 3
+    tree-max-entries: 200
+    readme-max-chars: 8000
+    issues-max: 20
+    commits-max: 20

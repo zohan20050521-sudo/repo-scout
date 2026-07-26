@@ -2,7 +2,7 @@
 
 > 本文档为设计基线,随实现迭代更新。
 
-- 版本:v0.1(设计基线)
+- 版本:v0.2(v0.2 契约细化)
 - 日期:2026-07-26
 - 状态:待评审
 - 关联文档:[需求文档 requirements.md](requirements.md)
@@ -116,9 +116,66 @@ flowchart LR
 - Redis 装配:连接配置与会话记忆参数(窗口上限、过期时间,均可配置,FR-1.4)。
 - LangChain4j 模型客户端装配:DeepSeek base-url、模型名、超时等均可配置(FR-1.2);API Key 等敏感配置仅通过环境变量注入(FR-1.1,安全约束)。
 
-### 3.4 tools(v0.2,概要)
+### 3.4 tools 与 GitHub 集成(v0.2,详)
 
-GitHub 工具集:目录树、README、issues 列表(可按状态过滤)、最近 commits 四类工具(FR-2.2),以 Function Calling 方式暴露给 Agent 自主选用(FR-2.3);统一处理 GitHub API 限流与网络失败的重试/降级。进入 v0.2 前细化。
+#### 3.4.1 GitHub 访问共用基建
+
+- `GithubApiClient`(集成层,Spring `RestClient` 实现):GitHub API 的唯一出口,仓库接入服务(FR-2.1)与四个工具(FR-2.2)共用。**只暴露通用方法,不含业务语义**:
+  - `JsonNode getJson(String path, Map<String, ?> queryParams)`
+  - `String getRaw(String path, String acceptHeader)`(取 README 原文用,如 `application/vnd.github.raw+json`)
+- 配置 `app.github.*`:`base-url`(默认 `https://api.github.com`)、`token`(默认空,由环境变量 `GITHUB_TOKEN` 注入,非空则带 `Authorization: Bearer`)、`timeout`(连接与读超时,默认 10s)。请求固定携带 `User-Agent: repo-scout` 与 `X-GitHub-Api-Version` 头。
+- 统一错误映射(client 内抛专用异常,由全局异常处理器映射为统一错误结构):
+
+  | GitHub 响应 | 重试 | 异常 | 对外映射 |
+  | --- | --- | --- | --- |
+  | 404 | 不重试 | `RepoNotFoundException` | 404 `REPO_NOT_FOUND` |
+  | 403/429 且具限流特征(`X-RateLimit-Remaining: 0` 或响应 message 含 rate limit) | 不重试 | `GithubRateLimitException` | 502 `GITHUB_UNAVAILABLE`(message 明示限流) |
+  | 网络错误/超时/5xx | 固定间隔 500ms 重试 1 次 | 仍失败抛 `GithubUnavailableException` | 502 `GITHUB_UNAVAILABLE` |
+
+  失败记 WARN 日志(path、状态码),不得记录 token。
+- `RepoRef`:record `(owner, name, defaultBranch)`,仓库标识,owner/name 为 GitHub 规范大小写,供工具层使用。
+- `ToolsProperties`(`app.tools.*`):工具裁剪配置,默认 `tree-max-depth=3`、`tree-max-entries=200`、`readme-max-chars=8000`、`issues-max=20`、`commits-max=20`;v0.2 契约期固化默认值,工具实现期只读。
+- 仓库接入服务(FR-2.1)基于 `getJson("/repos/{owner}/{name}")` 解析元信息;幂等落库用 `findByOwnerAndName` 查重,并发唯一键冲突捕获 `DataIntegrityViolationException` 后重查更新兜底。
+
+#### 3.4.2 四个 GitHub 工具契约(FR-2.2,实现于后续任务)
+
+- 形态:`GithubTreeTool` / `GithubReadmeTool` / `GithubIssuesTool` / `GithubCommitsTool` 四个独立类(tools 包)。**非单例 bean**:按仓库实例化,构造注入 `(GithubApiClient, ToolsProperties, RepoRef)`;方法实现期加 LangChain4j `@Tool` 注解,方法参数只含模型可见参数——repoId 一律不进模型参数,由构造时的 RepoRef 决定访问哪个仓库。
+- 签名与行为:
+
+1. `String repoTree(Integer maxDepth)`:`GET /repos/{owner}/{name}/git/trees/{defaultBranch}?recursive=1`;maxDepth 空用默认值、上限受 `tree-max-depth` 约束;输出缩进树形文本,目录带 `/` 后缀;条目超 `tree-max-entries` 截断并加尾注;GitHub 返回 `truncated=true` 同样注明。输出模板:
+
+   ```text
+   src/
+     main/
+       java/
+         RepoScoutApplication.java
+   README.md
+   (已截断:共 340 项,显示前 200 项)
+   ```
+
+2. `String readme()`:`GET /repos/{owner}/{name}/readme`(Accept `application/vnd.github.raw+json`);超 `readme-max-chars` 截断加尾注;404 返回文本「该仓库没有 README」,不抛异常。输出模板:
+
+   ```text
+   # 项目名
+   项目介绍正文……
+   (已截断:原文 12000 字符,显示前 8000 字符)
+   ```
+
+3. `String issues(String state)`:state ∈ `open|closed|all`(非法值按 open);`per_page` = `issues-max`;**必须过滤掉含 `pull_request` 字段的条目**(该端点混含 PR,已知坑);空结果返回「无符合条件的 issue」。输出模板(每行一条):
+
+   ```text
+   #42 [open] 登录超时后会话未清理(更新于 2026-07-20;标签 bug,auth)
+   #38 [open] 支持自定义端口(更新于 2026-07-18;标签 enhancement)
+   ```
+
+4. `String recentCommits(Integer limit)`:limit 空用默认值、上限 `commits-max`。输出模板(每行一条):
+
+   ```text
+   a1b2c3d 2026-07-25 alice: fix: 修复会话过期时间未刷新
+   9e8f7a6 2026-07-24 bob: feat: 新增仓库接入接口
+   ```
+
+- 错误策略(四工具一致):捕获 GitHub 异常,**返回一行可读文本**(如「GitHub API 限流,请稍后重试」),不向上抛,保证工具失败不中断对话;详情进 WARN 日志。
 
 ### 3.5 rag(v0.3,概要)
 
@@ -177,14 +234,30 @@ sequenceDiagram
 对应 FR-1.4:
 
 - 定位:存放各会话的多轮消息历史。存 Redis 而非进程内,保证服务重启后同一 `sessionId` 的上下文仍在。
-- 键组织:按 `sessionId` 组织,一个会话对应各自独立的键,天然保证不同会话上下文互不串扰;具体键名格式与消息序列化方式「待实现时定」。
-- 窗口上限:记忆设窗口上限(按消息条数或 token 数),超出后按策略截断;上限可配置。
-- 过期策略:每个会话设置过期时间(TTL),每次写回时刷新,过期后由 Redis 自动清理;过期时间可配置。
+- 键组织:每个会话一个 STRING 类型键,键名 `repo-scout:chat:memory:{sessionId}`(项目键前缀规范 `repo-scout:{模块}:{业务}:{id}`),天然保证不同会话上下文互不串扰。
+- 值格式:LangChain4j `ChatMessageSerializer` 序列化的消息列表 JSON。
+- 窗口上限:记忆按消息条数设窗口上限(默认 20 条),超出后截断;上限可配置。
+- 过期策略:每个会话设置过期时间(TTL,默认 24h),每次写入刷新,过期后由 Redis 自动清理;过期时间可配置。
 
 ### 5.2 MySQL:业务数据
 
 - v0.1:仅完成数据源连接配置(FR-1.1),不建任何表。
-- v0.2 起:存放仓库接入记录等业务数据(FR-2.1),表结构进入 v0.2 时细化。
+- **schema 由 Flyway 管理**(v0.2 起决策):迁移脚本随代码入库(`src/main/resources/db/migration/`),`spring.jpa.hibernate.ddl-auto=none`,实体不负责建表;测试在 H2(MySQL 兼容模式)上执行同一迁移脚本,顺带验证脚本可执行,因此脚本不写 `ENGINE`/`CHARSET` 子句(MySQL 8 默认即 InnoDB/utf8mb4)。
+- v0.2 起:repo 表存放仓库接入记录(FR-2.1)。owner/name 存 GitHub 规范大小写,`(owner, name)` 唯一键支撑幂等接入与并发冲突兜底。DDL 摘要(`V1__create_repo_table.sql`):
+
+  ```sql
+  CREATE TABLE repo (
+      id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+      owner          VARCHAR(100)  NOT NULL,
+      name           VARCHAR(200)  NOT NULL,
+      default_branch VARCHAR(100)  NOT NULL,
+      description    VARCHAR(1000) NULL,
+      html_url       VARCHAR(500)  NOT NULL,
+      created_at     DATETIME      NOT NULL,
+      updated_at     DATETIME      NOT NULL,
+      CONSTRAINT uk_repo_owner_name UNIQUE (owner, name)
+  );
+  ```
 
 ### 5.3 向量库:文档向量(v0.3 起)
 
