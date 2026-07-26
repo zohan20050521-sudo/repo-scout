@@ -1,0 +1,27 @@
+# 保持构建上下文精简,并让「改文档/改产物」不破坏镜像层缓存。
+# 注意:mvnw、.mvn/、pom.xml、src/ 是构建必需,绝不排除。
+
+# 构建产物与本地缓存
+target/
+
+# 版本库与 CI 元数据(镜像构建用不到)
+.git/
+.github/
+
+# 文档(不参与构建;单独排除以稳定缓存)
+docs/
+*.md
+
+# Docker 自身文件无需进构建上下文
+Dockerfile
+.dockerignore
+compose.yaml
+
+# IDE / OS 杂物
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+.DS_Store

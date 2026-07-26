@@ -1,0 +1,57 @@
+# repo-scout 一键启动:app + mysql + redis
+#
+# 端口策略:mysql / redis 不映射宿主机端口(compose 内部网络互通即可),
+#   避免与本机既有开发进程(3306 / 6379)冲突。仅 app 对外暴露。
+# 启动:  DEEPSEEK_API_KEY=sk-xxxx docker compose up -d --build
+# 宿主 8080 被占用时:  APP_PORT=18080 DEEPSEEK_API_KEY=sk-xxxx docker compose up -d --build
+
+services:
+  app:
+    build: .
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      # compose 原生 fail-fast:未设置 DEEPSEEK_API_KEY 直接报错退出,不会启动到一半
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?请设置 DEEPSEEK_API_KEY 后再启动}
+      # 连接 compose 内部的 mysql / redis
+      MYSQL_HOST: mysql
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-repo-scout-local}
+      REDIS_HOST: redis
+      # 其余可调项(DEEPSEEK_MODEL / DEEPSEEK_BASE_URL / CHAT_* 等)一律走镜像内默认值。
+      # 不在此透传的原因:application.yml 用 Spring 占位符 ${VAR:default},
+      # 若透传空串会覆盖掉默认值。需要覆盖时,在本 environment 段显式赋非空值即可。
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_DATABASE: repo_scout
+      # 仅限本地/内网演示的默认口令(一期无鉴权定位如此,不算泄密);对外部署务必覆盖
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-repo-scout-local}
+    volumes:
+      # 命名数据卷持久化,docker compose down(不带 -v)不会丢库
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      # 用容器内自带的 MYSQL_ROOT_PASSWORD 做 ping;$$ 转义为字面量 $,交给容器内 shell 展开
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    # 不挂卷:会话记忆有 TTL、丢失可接受(与概要设计 6.4 的定位一致)
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  mysql-data:

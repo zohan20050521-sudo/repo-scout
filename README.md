@@ -74,6 +74,56 @@ curl -s -X POST http://localhost:8080/api/chat \
 mvn -B verify
 ```
 
+## Docker 一键启动
+
+在干净环境用 Docker 一键拉起 **应用 + MySQL + Redis**,无需本地安装 JDK / Maven。
+
+### 前置
+
+- Docker Engine + Docker Compose V2(`docker compose version` 可用)
+- 一个可用的 `DEEPSEEK_API_KEY`
+
+### 启动
+
+```bash
+# 注入 Key 并后台构建启动三件套(app / mysql / redis)
+DEEPSEEK_API_KEY=sk-xxxx docker compose up -d --build
+```
+
+- 未设置 `DEEPSEEK_API_KEY` 时,compose 直接报错退出(fail-fast),不会启动到一半。
+- MySQL、Redis 仅在 compose 内部网络互通,**不映射宿主机端口**,不会与本机既有的 3306 / 6379 冲突。
+
+### 验证
+
+```bash
+# 健康检查
+curl http://localhost:8080/api/health
+# → {"status":"UP","application":"repo-scout"}
+
+# 对话(证明应用已连通容器内 Redis 会话记忆)
+curl -s -X POST http://localhost:8080/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "用一句话介绍你自己"}'
+```
+
+### 端口覆盖
+
+宿主 8080 被占用时,用 `APP_PORT` 换一个宿主端口(容器内仍是 8080):
+
+```bash
+APP_PORT=18080 DEEPSEEK_API_KEY=sk-xxxx docker compose up -d --build
+curl http://localhost:18080/api/health
+```
+
+### 停止与清理
+
+> compose 对所有子命令统一做 `DEEPSEEK_API_KEY` 校验,故 `down` / `ps` 等也需带上该变量(停机场景下值可随意)。
+
+```bash
+DEEPSEEK_API_KEY=x docker compose down      # 停止并删除容器,保留 MySQL 数据卷
+DEEPSEEK_API_KEY=x docker compose down -v   # 额外删除数据卷:MySQL 业务数据会被清空
+```
+
 ## 项目状态
 
 🚧 **开发中(v0.1)**
