@@ -24,6 +24,43 @@
 
 一期仅提供 REST API,不做前端。
 
+## 本地运行
+
+### 环境要求
+
+- JDK 17
+- Maven 3.9+(或直接使用项目自带的 `./mvnw`)
+- MySQL、Redis 可选:v0.1 的连接为惰性初始化,健康检查不探测外部依赖,未启动 MySQL/Redis 也能运行与测试
+
+### 环境变量
+
+均有本地默认值,本地快速体验可全部不设;连接真实 MySQL/Redis 时按需覆盖:
+
+| 变量 | 说明 | 默认值 |
+| --- | --- | --- |
+| `MYSQL_HOST` | MySQL 主机 | `localhost` |
+| `MYSQL_PORT` | MySQL 端口 | `3306` |
+| `MYSQL_DB` | MySQL 数据库名 | `repo_scout` |
+| `MYSQL_USER` | MySQL 用户名 | `root` |
+| `MYSQL_PASSWORD` | MySQL 密码 | 空 |
+| `REDIS_HOST` | Redis 主机 | `localhost` |
+| `REDIS_PORT` | Redis 端口 | `6379` |
+| `REDIS_PASSWORD` | Redis 密码 | 空 |
+
+### 启动与验证
+
+```bash
+# 启动(默认端口 8080)
+mvn spring-boot:run
+
+# 健康检查
+curl http://localhost:8080/api/health
+# → {"status":"UP","application":"repo-scout"}
+
+# 构建并运行测试
+mvn -B verify
+```
+
 ## 项目状态
 
 🚧 **开发中(v0.1)**
