@@ -39,7 +39,7 @@ MYSQL_ROOT_PASSWORD=<REPLACE_ME>
 # RAG_CHUNK_SIZE=400
 # RAG_CHUNK_OVERLAP=80
 # RAG_TOP_K=4
-# RAG_MIN_SCORE=0.5
+# RAG_MIN_SCORE=0.75
 
 # ── 选填：GitHub API ──────────────────────────────────────────────────────────
 

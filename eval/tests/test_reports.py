@@ -162,7 +162,7 @@ def test_markdown_summary_contains_required_sections_and_caveats() -> None:
     assert "## 总体指标" in text
     assert "## 分类别指标" in text
     assert "左截断" in text
-    assert "不修改后端默认 `RAG_MIN_SCORE=0.5`" in text
+    assert "当前后端默认 `RAG_MIN_SCORE=0.75`" in text
     assert "不关闭 Issue #3" in text
     assert "…(共" in text, "长答案在 Markdown 中截断"
     assert "cases.jsonl" in text
