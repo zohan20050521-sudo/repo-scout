@@ -63,7 +63,7 @@ Pro 计划可按顺序创建以下四条规则（顺序决定优先级，精确�
 
 ## 豁免
 
-- `GET /api/health`（健康检查）不在 `/api/chat` 等精确规则内，由 global-api 兜底（30 req/60s 足够）；
+- `GET /api/health`（健康检查）不在 `/api/chat` 等精确规则内，由 global-api 兜底（5 req/10s 足够）；
   若需完全豁免，可在 WAF 自定义规则中添加 Skip 规则，优先级高于 rate-limit 规则。
 - Host 条件是必需的，避免规则影响同一 Zone 下的 `api.chada010.me` 等现有服务。
 
@@ -80,9 +80,9 @@ for i in {1..7}; do
   curl -s -o /dev/null -w "req $i: %{http_code}\n" \
     -X POST https://repo-scout.chada010.me/api/chat \
     -H 'Content-Type: application/json' \
-    -d '{"message":"test"}'
+    -d '{"message":""}'
 done
-# 前 5 次应为 401/200，第 6/7 次应为 429
+# 通过 Vercel 同源代理时:前 5 次应为 400,第 6/7 次应为 429
 ```
 
 ---
