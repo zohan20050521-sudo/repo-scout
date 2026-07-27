@@ -50,4 +50,4 @@ jobs:
         run: repo-scout-eval validate --dataset datasets/v1.yaml
 
       - name: Summarize sample results (offline)
-        run: repo-scout-eval summarize examples/sample-results/20260727T000000Z-sample
+        run: repo-scout-eval summarize examples/sample-results/20260727T000000Z-sample --dataset datasets/v1.yaml

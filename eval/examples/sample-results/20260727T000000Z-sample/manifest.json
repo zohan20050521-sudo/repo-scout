@@ -5,7 +5,7 @@
   "started_at": "2026-07-27T00:00:00Z",
   "finished_at": "2026-07-27T00:05:00Z",
   "python_version": "3.12.3 (main, Jun 19 2026, 12:46:00) [GCC 13.3.0]",
-  "dataset_path": "/home/chad/.treehouse/repo-scout-8e662e/3/repo-scout/eval/datasets/v1.yaml",
+  "dataset_path": "datasets/v1.yaml",
   "dataset_version": "1",
   "dataset_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "dataset_case_count": 2,
