@@ -47,6 +47,9 @@ buildNumber.properties
 # IDE - VS Code
 .vscode/
 
+# Local Claude worktrees and agent state
+.claude/
+
 # OS
 .DS_Store
 
