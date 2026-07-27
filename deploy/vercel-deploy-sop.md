@@ -91,6 +91,7 @@ curl -s https://api.repo-scout.chada010.me/api/repos
 
 ## 注意事项
 
-- Vercel 免费套餐 serverless function 有执行时间限制（默认 10s，Pro 300s）；
-  索引（`/api/repos/{id}/index`）与报告（`/api/repos/{id}/report`）是同步长请求，建议升级 Pro 或在 Vercel 项目 Settings → Functions 中延长超时。
+- Vercel 免费套餐 serverless function 执行时间限制为 **10s**，Pro 套餐可延长至 300s；
+  - 索引（`/api/repos/{id}/index`）与报告（`/api/repos/{id}/report`）是同步长请求，**建议升级 Pro** 或在 Vercel 项目 **Settings → Functions → Function Max Duration** 中延长超时；
+  - `web/api/[...path].ts` 已设置 upstream timeout 为 180s（3min），但受 Vercel function 执行时间硬限制约束。
 - Preview 部署不含后端环境变量，访问 `/api/**` 会返回 503；这是预期行为，不影响 Production。

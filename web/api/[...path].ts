@@ -7,6 +7,8 @@ import http from 'node:http'
 
 const BACKEND = (process.env['REPO_SCOUT_BACKEND_URL'] ?? '').replace(/\/$/, '')
 const INTERNAL_KEY = process.env['REPO_SCOUT_INTERNAL_KEY'] ?? ''
+// 索引与报告是同步长请求，超时需宽松（Vercel Free 10s，Pro 可调至 300s）
+const UPSTREAM_TIMEOUT_MS = 180_000 // 3min
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (!BACKEND) {
@@ -55,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   try {
     const upstream = await new Promise<{ status: number; headers: Record<string, string>; body: Buffer }>(
       (resolve, reject) => {
-        const r = lib.request(url, { method: req.method ?? 'GET', headers: upHeaders }, (u) => {
+        const r = lib.request(url, { method: req.method ?? 'GET', headers: upHeaders, timeout: UPSTREAM_TIMEOUT_MS }, (u) => {
           const chunks: Buffer[] = []
           u.on('data', (c: Buffer) => chunks.push(c))
           u.on('end', () =>
@@ -67,6 +69,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           )
         })
         r.on('error', reject)
+        r.on('timeout', () => {
+          r.destroy()
+          reject(new Error('upstream timeout'))
+        })
         if (body) r.write(body)
         r.end()
       },

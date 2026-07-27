@@ -15,6 +15,8 @@ DEEPSEEK_API_KEY=<REPLACE_ME>
 INTERNAL_API_KEY=<REPLACE_ME>
 
 # MySQL root 密码（compose 内部使用，不对外暴露）
+# 生成：openssl rand -hex 16
+# 注意：compose.prod.yaml 中 MYSQL_ROOT_PASSWORD 有 fail-fast 检查，未设置会拒绝启动
 MYSQL_ROOT_PASSWORD=<REPLACE_ME>
 
 # ── 选填：DeepSeek ────────────────────────────────────────────────────────────
