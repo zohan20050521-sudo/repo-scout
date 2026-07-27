@@ -23,9 +23,6 @@
 | 向量化(Embedding) | LangChain4j 进程内 ONNX 模型 `bge-small-zh` |
 | 业务数据 | MySQL |
 | 会话记忆 | Redis |
-| 向量化(Embedding) | LangChain4j 进程内 ONNX 模型 `bge-small-zh` |
-| 业务数据 | MySQL |
-| 会话记忆 | Redis |
 | 效果评估 | Python 批量评测脚本 |
 | 前端框架 | Vue 3 + TypeScript + Vite |
 | 前端 UI | Element Plus |
