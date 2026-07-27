@@ -2,8 +2,8 @@
 
 > 本文档为设计基线,随实现迭代更新。
 
-- 版本:v0.3(v0.3 RAG 检索接入对话与仓库导读报告落地)
-- 日期:2026-07-26
+- 版本:v0.3.5(公网演示门禁、索引状态与结构化 RAG 引用)
+- 日期:2026-07-27
 - 状态:待评审
 - 关联文档:[需求文档 requirements.md](requirements.md)
 
@@ -208,6 +208,23 @@ v0.3 分两步落地:先交付 **FR-3.1 向量化入库管道**,再交付 **FR-3
 - **报告确定性取数 + 单次 LLM 调用**:`POST /api/repos/{id}/report` 由 `ReportService` 同步生成,**不经过 Assistant/会话/记忆**(一次性任务不需要记忆;确定性取数成本可控、可测试)——服务端直接实例化四个 GitHub 工具按默认参数取数(复用工具内置裁剪与失败降级文本,GitHub 故障不产生 502),加上 `RepoRetriever` 对固定查询集(定位/上手/架构)的摘录(按 `(filePath, chunkIndex)` 去重合并),拼成单条消息交 LLM 输出五个固定二级标题的 Markdown(项目定位/技术栈/目录结构解读/上手指引/近期动向)。服务端校验五节齐全且非空,不合规追加纠正指令重试一次,仍不合规照常返回并记 WARN。
 - **未索引降级,不自动索引**:绑定会话未建索引时 chat 退化为纯工具模式(`sources=[]`),report 摘录区标注未索引;**不做**绑定时/报告前自动索引——对话延迟可控、不隐式放大 GitHub 调用、索引保持显式生命周期步骤(v0.4 评测可复现)。建议先 `POST /api/repos/{id}/index` 再问答/生成报告。
 
+#### 3.5.2 v0.3.5 前端观察契约与公网内部门禁
+
+- **索引聚合状态**:`GET /api/repos/{id}/index-status` 先校验 repo 已接入,再用一条
+  聚合查询计算 `count(id)`、`count(distinct filePath)`、`max(createdAt)`,避免把 content/
+  embedding 拉入内存。`chunkCount > 0` 即 `indexed=true`;无块返回 0/0/null。
+- **结构化引用**:`ChatContentRetriever` 在本轮实际注入的 `Content` metadata 中同时携带
+  `file_path`、`chunk_index`、`score`、`source_url`;`ChatService` 只消费同一轮
+  `Result.sources()` 生成响应,不二次检索。兼容字段 `sources` 仍按 filePath 首次出现去重,
+  `citations` 按 `(filePath, chunkIndex)` 去重并保留完整 chunk。单个 metadata 缺失或类型
+  异常局部跳过。GitHub URL 按 UTF-8 逐路径段编码,路径 `/` 保留。
+- **共享密钥信任边界**:`InternalApiKeyFilter` 仅在 `INTERNAL_API_KEY` 非空时保护
+  `/api/**`;精确 `GET /api/health` 与 OPTIONS 公开。比较使用常量时间,401 直接输出第六个
+  错误码 `UNAUTHORIZED`,日志不记录 key。密钥只存在 Vercel Serverless/VPS,浏览器通过
+  Vercel 同源代理访问,不新增 CORS。
+- **不是用户鉴权**:该门禁只阻止绕过代理直连后端,不能阻止访客经公开代理滥用接口;
+  Cloudflare/Nginx/Vercel 限流与高成本端点配额仍是正式公网开放前的部署必做项。
+
 ---
 
 ## 4. 关键数据流:v0.1 一次对话请求
@@ -357,5 +374,5 @@ sequenceDiagram
 - **显式超时**(响应时间预期):所有外部调用(DeepSeek、GitHub)必须设置显式超时,不允许无限等待;重型任务(如分析报告)的接口设计需考虑异步或明确的超时策略。
 - **成本控制**(API 调用成本控制):会话记忆设窗口上限;工具返回内容注入提示词前做裁剪;Agent 单次问答的工具调用轮数设上限;用户消息长度设上限;记录 token 用量。
 - **统一错误结构**(错误处理原则):错误码 + 人类可读信息,按类别映射 HTTP 状态码,不泄露堆栈与密钥;检索不到依据时承认「不知道」,不编造。
-- **一期无鉴权、仅内网**(安全与鉴权范围):v0.1–v0.4 不做认证鉴权,仅用于本地/内网演示,不暴露公网;对外开放前必须先补鉴权方案。
+- **内部共享密钥门禁,非用户鉴权**(安全与鉴权范围):v0.3.5 为公网演示增加可关闭的应用层门禁,只允许持有服务端共享密钥的 Vercel 同源代理访问后端 `/api/**`;浏览器不得持钥。它不替代用户鉴权、限流或高成本端点配额。
 - **敏感配置仅环境变量**(安全与鉴权范围):API Key、数据库/Redis 口令等仅通过环境变量注入,不写入代码、明文配置或仓库,日志与错误响应中不得输出。

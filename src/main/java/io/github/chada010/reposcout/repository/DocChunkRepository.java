@@ -1,5 +1,6 @@
 package io.github.chada010.reposcout.repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -19,6 +20,24 @@ public interface DocChunkRepository extends JpaRepository<DocChunk, Long> {
 
     /** 该仓库是否已建文档索引:检索入口先查此项,未索引直接空返回,不触碰 Embedding 模型。 */
     boolean existsByRepoId(long repoId);
+
+    /** 单条聚合查询返回块数、唯一文件数与最近索引时间,不加载 content/embedding。 */
+    @Query("""
+            select count(d.id) as chunkCount,
+                   count(distinct d.filePath) as fileCount,
+                   max(d.createdAt) as indexedAt
+            from DocChunk d
+            where d.repoId = :repoId
+            """)
+    IndexStatistics aggregateIndexStatistics(@Param("repoId") long repoId);
+
+    interface IndexStatistics {
+        long getChunkCount();
+
+        long getFileCount();
+
+        LocalDateTime getIndexedAt();
+    }
 
     /**
      * 批量删除某仓库全部块。用 JPQL 批量 DELETE(立即执行)而非派生删除:

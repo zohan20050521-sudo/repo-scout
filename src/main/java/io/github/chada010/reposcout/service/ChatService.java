@@ -1,7 +1,8 @@
 package io.github.chada010.reposcout.service;
 
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Objects;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -60,25 +61,63 @@ public class ChatService {
                 usage == null ? null : usage.outputTokenCount(),
                 usage == null ? null : usage.totalTokenCount(),
                 costMs);
-        return new ChatResult(effectiveSessionId, result.content(), extractSources(result));
+        CitationExtraction extraction = extractCitations(result);
+        return new ChatResult(effectiveSessionId, result.content(), extraction.sources(), extraction.citations());
     }
 
-    /**
-     * 从 {@code Result.sources()} 提取本轮实际注入的检索来源文件路径(FR-3.2):
-     * 去重、保持检索得分降序的首次出现顺序;null/空/无 metadata 一律得空列表,永不为 null。
-     */
-    private static List<String> extractSources(Result<String> result) {
-        List<Content> sources = result.sources();
-        if (sources == null || sources.isEmpty()) {
-            return List.of();
+    /** 从本轮实际注入的 Result.sources 提取兼容路径列表与结构化引用。 */
+    private static CitationExtraction extractCitations(Result<String> result) {
+        List<Content> resultSources = result.sources();
+        if (resultSources == null || resultSources.isEmpty()) {
+            return new CitationExtraction(List.of(), List.of());
         }
-        return sources.stream()
-                .map(content -> content.textSegment() == null
-                        ? null
-                        : content.textSegment().metadata().getString(ChatContentRetriever.FILE_PATH_KEY))
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
+        Map<String, Boolean> sourcePaths = new LinkedHashMap<>();
+        Map<CitationKey, Citation> citations = new LinkedHashMap<>();
+        for (Content content : resultSources) {
+            String filePath = extractFilePath(content);
+            if (filePath != null) {
+                sourcePaths.putIfAbsent(filePath, Boolean.TRUE);
+            }
+            Citation citation = toCitation(content);
+            if (citation != null) {
+                citations.putIfAbsent(new CitationKey(citation.filePath(), citation.chunkIndex()), citation);
+            }
+        }
+        return new CitationExtraction(List.copyOf(sourcePaths.keySet()), List.copyOf(citations.values()));
+    }
+
+    private static String extractFilePath(Content content) {
+        if (content == null || content.textSegment() == null) {
+            return null;
+        }
+        try {
+            return content.textSegment().metadata().getString(ChatContentRetriever.FILE_PATH_KEY);
+        } catch (RuntimeException e) {
+            log.warn("跳过 metadata 类型异常的 RAG 来源路径: {}", e.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    /** metadata 缺失或类型异常只跳过当前坏项,不影响本轮回答。 */
+    private static Citation toCitation(Content content) {
+        if (content == null || content.textSegment() == null) {
+            return null;
+        }
+        try {
+            var segment = content.textSegment();
+            var metadata = segment.metadata();
+            String filePath = metadata.getString(ChatContentRetriever.FILE_PATH_KEY);
+            Integer chunkIndex = metadata.getInteger(ChatContentRetriever.CHUNK_INDEX_KEY);
+            Double score = metadata.getDouble(ChatContentRetriever.SCORE_KEY);
+            String sourceUrl = metadata.getString(ChatContentRetriever.SOURCE_URL_KEY);
+            if (filePath == null || chunkIndex == null || score == null || sourceUrl == null) {
+                return null;
+            }
+            return new Citation(filePath, chunkIndex, segment.text(), score, sourceUrl);
+        } catch (RuntimeException e) {
+            log.warn("跳过 metadata 类型异常的 RAG 引用: {}", e.getClass().getSimpleName());
+            return null;
+        }
     }
 
     /**
@@ -114,7 +153,16 @@ public class ChatService {
         }
     }
 
-    /** 对话结果:会话 ID(可能为服务端新生成)、模型回答与本轮注入的检索来源文件路径。 */
-    public record ChatResult(String sessionId, String answer, List<String> sources) {
+    public record ChatResult(String sessionId, String answer, List<String> sources,
+                             List<Citation> citations) {
+    }
+
+    public record Citation(String filePath, int chunkIndex, String excerpt, double score, String url) {
+    }
+
+    private record CitationKey(String filePath, int chunkIndex) {
+    }
+
+    private record CitationExtraction(List<String> sources, List<Citation> citations) {
     }
 }

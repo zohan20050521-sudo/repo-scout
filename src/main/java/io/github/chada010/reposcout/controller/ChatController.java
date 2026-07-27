@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import io.github.chada010.reposcout.config.ChatProperties;
 import io.github.chada010.reposcout.controller.dto.ChatRequest;
 import io.github.chada010.reposcout.controller.dto.ChatResponse;
+import io.github.chada010.reposcout.controller.dto.CitationResponse;
 import io.github.chada010.reposcout.exception.InvalidParamException;
 import io.github.chada010.reposcout.service.ChatService;
 
@@ -39,7 +40,11 @@ public class ChatController {
         validate(request);
         ChatService.ChatResult result = chatService.chat(
                 request.sessionId(), request.message(), request.repoId());
-        return new ChatResponse(result.sessionId(), result.answer(), result.sources());
+        return new ChatResponse(result.sessionId(), result.answer(), result.sources(),
+                result.citations().stream()
+                        .map(citation -> new CitationResponse(citation.filePath(), citation.chunkIndex(),
+                                citation.excerpt(), citation.score(), citation.url()))
+                        .toList());
     }
 
     private void validate(ChatRequest request) {

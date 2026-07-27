@@ -1,8 +1,8 @@
 # repo-scout API 文档
 
-- 版本:v0.3
+- 版本:v0.3.5
 - Base URL:`http://localhost:8080`
-- 认证:一期不做鉴权,仅限本地/内网环境使用
+- 访问门禁:默认关闭;设置非空 `INTERNAL_API_KEY` 后,除精确 `GET /api/health` 外的 `/api/**` 请求须携带 `X-Repo-Scout-Internal-Key`
 
 ## 设计约定
 
@@ -25,8 +25,23 @@
 | `INTERNAL_ERROR` | 500 | 服务内部错误 |
 | `REPO_NOT_FOUND` | 404 | 仓库不存在:GitHub 查无此公开仓库(私有仓库同样 404),或按 id 查询的记录未接入 |
 | `GITHUB_UNAVAILABLE` | 502 | GitHub API 不可用:网络错误、超时、GitHub 5xx 或限流(限流时 message 明确提示) |
+| `UNAUTHORIZED` | 401 | 内部 API 门禁已开启,但共享密钥缺失或不匹配 |
 
 错误 `message` 不包含堆栈、密钥或内部实现细节。
+
+### 内部 API 门禁
+
+`INTERNAL_API_KEY` 为空或全空白时门禁关闭,本地开发行为不变。配置非空后,
+`/api/**` 请求须携带 `X-Repo-Scout-Internal-Key: <internal-key>`;仅精确
+`GET /api/health` 永远公开,OPTIONS 预检也直接放行。缺失或错误 key 返回
+`401 {"code":"UNAUTHORIZED","message":"无权访问该接口"}`。
+
+该共享密钥只存于 Vercel Serverless 与 VPS 环境变量,由同源服务端代理注入;浏览器、
+Vite 环境变量和前端 bundle 不得持有。目标链路为浏览器 → Vercel 同源 `/api` → 后端,
+本版本不新增 CORS。它不是用户鉴权,也无法阻止访客通过公开代理滥用接口;公网开放前仍须
+在 Cloudflare/Nginx/Vercel 层实施限流与高成本端点配额。
+
+以下门禁开启情景的 curl 示例统一使用占位值 `<internal-key>`。
 
 ---
 
@@ -92,7 +107,16 @@ v0.3 起绑定仓库的会话支持 **RAG 检索注入**(FR-3.2):若该仓库已
 {
   "sessionId": "0f14d0ab-9605-4a62-a9e4-5ed26688389b",
   "answer": "模型回答文本",
-  "sources": ["docs/api.md", "README.md"]
+  "sources": ["docs/api.md", "README.md"],
+  "citations": [
+    {
+      "filePath": "docs/api.md",
+      "chunkIndex": 3,
+      "excerpt": "统一错误响应结构……",
+      "score": 0.806,
+      "url": "https://github.com/zohan20050521-sudo/repo-scout/blob/main/docs/api.md"
+    }
+  ]
 }
 ```
 
@@ -100,7 +124,16 @@ v0.3 起绑定仓库的会话支持 **RAG 检索注入**(FR-3.2):若该仓库已
 | --- | --- | --- |
 | `sessionId` | string | 会话 ID(请求未携带时为服务端新生成) |
 | `answer` | string | 模型回答文本 |
-| `sources` | string[] | 本轮**实际注入**的检索来源文件路径,去重、按检索得分降序;未绑定/未索引/无命中为 `[]`(永不为 null)。答案还可能来自工具调用,`sources` 只反映检索注入 |
+| `sources` | string[] | 本轮**实际注入**的检索来源文件路径,按首次出现去重保序;未绑定/未索引/无命中为 `[]`(永不为 null)。同一文件命中多个块时仅出现一次 |
+| `citations` | object[] | 本轮实际注入块的结构化引用,按检索得分顺序、按 `(filePath, chunkIndex)` 去重;无引用为 `[]`(永不为 null) |
+| `citations[].filePath` | string | 仓库内文件路径 |
+| `citations[].chunkIndex` | number | 文件内从 0 开始的块序号 |
+| `citations[].excerpt` | string | 注入模型的完整 chunk 文本,不含 embedding |
+| `citations[].score` | number | 检索相似度原始 double 数值 |
+| `citations[].url` | string | GitHub blob 链接;owner/name/defaultBranch/path 均按 UTF-8 逐路径段编码,保留路径 `/` |
+
+`sources` 是旧调用方兼容字段,只表达来源文件路径;`citations` 面向引用卡片/跳转等精致前端,
+可在同一文件命中多个 chunk 时保留多条详情。单个 metadata 坏项会被跳过,不影响整轮回答。
 
 ### 错误
 
@@ -121,34 +154,40 @@ v0.3 起绑定仓库的会话支持 **RAG 检索注入**(FR-3.2):若该仓库已
 # 首轮:不带 sessionId,服务端生成
 curl -s -X POST http://localhost:8080/api/chat \
   -H 'Content-Type: application/json' \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>' \
   -d '{"message": "用一句话介绍你自己"}'
 # → {"sessionId":"<uuid>","answer":"..."}
 
 # 多轮:带上一轮返回的 sessionId
 curl -s -X POST http://localhost:8080/api/chat \
   -H 'Content-Type: application/json' \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>' \
   -d '{"sessionId": "<uuid>", "message": "我上一个问题是什么?"}'
 
 # 绑定仓库并提问(repoId 为 POST /api/repos 返回的 id):
 # 首次携带 repoId 完成绑定,Agent 自动调用工具基于该仓库真实数据作答
 curl -s -X POST http://localhost:8080/api/chat \
   -H 'Content-Type: application/json' \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>' \
   -d '{"sessionId": "<uuid>", "message": "这个项目怎么在本地跑起来?", "repoId": 1}'
 
 # 同一会话后续可省略 repoId,沿用绑定;追问可用指代
 curl -s -X POST http://localhost:8080/api/chat \
   -H 'Content-Type: application/json' \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>' \
   -d '{"sessionId": "<uuid>", "message": "刚才说的那个入口类在哪个目录?"}'
 
 # 绑定冲突示例:已绑定会话再传不同 repoId
 curl -s -X POST http://localhost:8080/api/chat \
   -H 'Content-Type: application/json' \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>' \
   -d '{"sessionId": "<uuid>", "message": "换一个", "repoId": 2}'
 # → 400 {"code":"INVALID_PARAM","message":"会话已绑定仓库 1,如需切换请新开会话"}
 
 # 参数错误示例
 curl -s -X POST http://localhost:8080/api/chat \
   -H 'Content-Type: application/json' \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>' \
   -d '{"sessionId": "not-a-uuid", "message": "你好"}'
 # → 400 {"code":"INVALID_PARAM","message":"sessionId 必须是 UUID 格式,或留空由服务端生成"}
 ```
@@ -205,18 +244,73 @@ curl -s -X POST http://localhost:8080/api/chat \
 # 裸 owner/repo 形态
 curl -s -X POST http://localhost:8080/api/repos \
   -H 'Content-Type: application/json' \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>' \
   -d '{"repo": "octocat/Hello-World"}'
 
 # 完整 URL 形态(允许尾部 / 或 .git),重复接入幂等返回同 id
 curl -s -X POST http://localhost:8080/api/repos \
   -H 'Content-Type: application/json' \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>' \
   -d '{"repo": "https://github.com/octocat/Hello-World.git"}'
 
 # 非法地址示例
 curl -s -X POST http://localhost:8080/api/repos \
   -H 'Content-Type: application/json' \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>' \
   -d '{"repo": "https://gitlab.com/a/b"}'
 # → 400 {"code":"INVALID_PARAM","message":"repo 格式不合法:仅支持 owner/repo 或 https://github.com/owner/repo(URL 允许尾部 / 或 .git)"}
+```
+
+---
+
+## GET /api/repos/{id}/index-status
+
+查询已接入仓库的当前文档索引状态。服务端通过一条聚合查询统计唯一文件数、块数与最近
+`createdAt`,不加载 chunk 内容或 embedding。`indexed = chunkCount > 0`。
+
+### 已索引响应 `200 OK`
+
+```json
+{
+  "repoId": 1,
+  "indexed": true,
+  "fileCount": 4,
+  "chunkCount": 63,
+  "indexedAt": "2026-07-27T12:00:00"
+}
+```
+
+### 未索引响应 `200 OK`
+
+```json
+{
+  "repoId": 1,
+  "indexed": false,
+  "fileCount": 0,
+  "chunkCount": 0,
+  "indexedAt": null
+}
+```
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `repoId` | number | 已接入仓库 id |
+| `indexed` | boolean | 是否存在至少一个文档块 |
+| `fileCount` | number | 唯一 `filePath` 数 |
+| `chunkCount` | number | 文档块总数 |
+| `indexedAt` | string/null | 最近一批块的最大 `createdAt`;未索引为 null |
+
+### 错误
+
+| 场景 | 状态码 | code |
+| --- | --- | --- |
+| `id` 非数字 | 400 | `INVALID_PARAM` |
+| 仓库未接入/不存在 | 404 | `REPO_NOT_FOUND` |
+| 门禁开启但 key 缺失/错误 | 401 | `UNAUTHORIZED` |
+
+```bash
+curl -s http://localhost:8080/api/repos/1/index-status \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>'
 ```
 
 ---
@@ -270,11 +364,13 @@ curl -s -X POST http://localhost:8080/api/repos \
 
 ```bash
 # 先接入仓库拿到 id,再触发索引
-curl -s -X POST http://localhost:8080/api/repos/1/index
+curl -s -X POST http://localhost:8080/api/repos/1/index \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>'
 # → {"repoId":1,"fileCount":8,"chunkCount":63,"costMs":2450}
 
 # 未接入的 id
-curl -s -X POST http://localhost:8080/api/repos/999999/index
+curl -s -X POST http://localhost:8080/api/repos/999999/index \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>'
 # → 404 {"code":"REPO_NOT_FOUND","message":"仓库未接入或不存在:id=999999"}
 ```
 
@@ -331,14 +427,18 @@ curl -s -X POST http://localhost:8080/api/repos/999999/index
 
 ```bash
 # 建议先索引(摘录区才有内容),再生成报告
-curl -s -X POST http://localhost:8080/api/repos/1/index
-curl -s -X POST http://localhost:8080/api/repos/1/report
+curl -s -X POST http://localhost:8080/api/repos/1/index \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>'
+curl -s -X POST http://localhost:8080/api/repos/1/report \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>'
 # → {"repoId":1,"generatedAt":"2026-07-26T12:00:00","costMs":12450,"report":"## 项目定位\n……"}
 
 # 未接入 / id 非数字
-curl -s -X POST http://localhost:8080/api/repos/999999/report
+curl -s -X POST http://localhost:8080/api/repos/999999/report \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>'
 # → 404 {"code":"REPO_NOT_FOUND","message":"仓库未接入或不存在:id=999999"}
-curl -s -X POST http://localhost:8080/api/repos/abc/report
+curl -s -X POST http://localhost:8080/api/repos/abc/report \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>'
 # → 400 {"code":"INVALID_PARAM","message":"参数 id 类型不合法"}
 ```
 
@@ -362,7 +462,8 @@ JSON 数组,元素结构同 `POST /api/repos` 响应:
 ### 示例
 
 ```bash
-curl -s http://localhost:8080/api/repos
+curl -s http://localhost:8080/api/repos \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>'
 ```
 
 ---
@@ -385,7 +486,10 @@ curl -s http://localhost:8080/api/repos
 ### 示例
 
 ```bash
-curl -s http://localhost:8080/api/repos/1
-curl -s http://localhost:8080/api/repos/999999   # → 404 REPO_NOT_FOUND
-curl -s http://localhost:8080/api/repos/abc      # → 400 INVALID_PARAM
+curl -s http://localhost:8080/api/repos/1 \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>'
+curl -s http://localhost:8080/api/repos/999999   # → 404 REPO_NOT_FOUND \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>'
+curl -s http://localhost:8080/api/repos/abc      # → 400 INVALID_PARAM \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>'
 ```

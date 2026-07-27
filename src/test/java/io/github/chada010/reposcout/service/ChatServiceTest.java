@@ -53,8 +53,13 @@ class ChatServiceTest {
                 .build();
     }
 
-    private static Content sourceContent(String filePath) {
-        return Content.from(TextSegment.from("块内容", Metadata.from("file_path", filePath)));
+    private static Content sourceContent(String filePath, int chunkIndex, String text, double score) {
+        Metadata metadata = new Metadata()
+                .put("file_path", filePath)
+                .put("chunk_index", chunkIndex)
+                .put("score", score)
+                .put("source_url", "https://github.com/o/r/blob/main/" + filePath);
+        return Content.from(TextSegment.from(text, metadata));
     }
 
     @Test
@@ -156,15 +161,24 @@ class ChatServiceTest {
                 .content("回答")
                 .tokenUsage(new TokenUsage(10, 5))
                 .sources(List.of(
-                        sourceContent("docs/api.md"),
-                        sourceContent("README.md"),
-                        sourceContent("docs/api.md")))
+                        sourceContent("docs/api.md", 3, "错误结构", 0.9),
+                        sourceContent("docs/api.md", 4, "错误码表", 0.8),
+                        sourceContent("README.md", 1, "运行说明", 0.7),
+                        sourceContent("docs/api.md", 3, "重复块", 0.6)))
                 .build());
 
         ChatService.ChatResult result = service().chat(SESSION_ID, "错误码有哪些", null);
 
         // 去重且保持检索得分降序的首次出现顺序
         assertThat(result.sources()).containsExactly("docs/api.md", "README.md");
+        assertThat(result.citations()).extracting(ChatService.Citation::filePath,
+                        ChatService.Citation::chunkIndex)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("docs/api.md", 3),
+                        org.assertj.core.groups.Tuple.tuple("docs/api.md", 4),
+                        org.assertj.core.groups.Tuple.tuple("README.md", 1));
+        assertThat(result.citations().get(0).excerpt()).isEqualTo("错误结构");
+        assertThat(result.citations().get(0).score()).isEqualTo(0.9);
     }
 
     @Test
@@ -175,6 +189,7 @@ class ChatServiceTest {
         ChatService.ChatResult result = service().chat(SESSION_ID, "你好", null);
 
         assertThat(result.sources()).isNotNull().isEmpty();
+        assertThat(result.citations()).isNotNull().isEmpty();
     }
 
     @Test
@@ -188,6 +203,26 @@ class ChatServiceTest {
         ChatService.ChatResult result = service().chat(SESSION_ID, "你好", null);
 
         assertThat(result.sources()).isEmpty();
+    }
+
+    @Test
+    void malformedCitationMetadataIsSkippedLocally() {
+        Metadata wrongType = new Metadata()
+                .put("file_path", "bad.md")
+                .put("chunk_index", "not-an-integer")
+                .put("score", 0.5)
+                .put("source_url", "https://example.test/bad.md");
+        given(assistant.chat(eq(SESSION_ID), anyString())).willReturn(Result.<String>builder()
+                .content("回答")
+                .sources(List.of(
+                        Content.from(TextSegment.from("坏块", wrongType)),
+                        sourceContent("good.md", 1, "好块", 0.8)))
+                .build());
+
+        ChatService.ChatResult result = service().chat(SESSION_ID, "问题", null);
+
+        assertThat(result.sources()).containsExactly("bad.md", "good.md");
+        assertThat(result.citations()).hasSize(1);
     }
 
     @Test
