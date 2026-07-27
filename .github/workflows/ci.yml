@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Build & Verify
+    name: Build & Verify (Java)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,3 +23,35 @@ jobs:
 
       - name: Maven verify
         run: ./mvnw -B verify
+
+  frontend:
+    name: Lint · Typecheck · Test · Build (Vue)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test -- --run
+
+      - name: Build
+        run: npm run build
