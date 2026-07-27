@@ -16,15 +16,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return
   }
 
-  // req.query.path 形如 ['repos', '1', 'index']（来自 /api/repos/1/index）
-  const rawPath = req.query['path']
+  // Vercel 当前生成的路由键名为 `...path`，兼容旧版/本地测试使用的 `path`。
+  // 两者形如 ['repos', '1', 'index']（来自 /api/repos/1/index）。
+  const rawPath = req.query['...path'] ?? req.query['path']
   const pathSegments = Array.isArray(rawPath) ? rawPath : [rawPath ?? '']
   const targetPath = '/api/' + pathSegments.join('/')
 
-  // 透传 query string（去掉 Vercel 注入的 path 参数）
+  // 透传 query string（去掉 Vercel 注入的 catch-all 参数）
   const search = new URLSearchParams()
   for (const [k, v] of Object.entries(req.query)) {
-    if (k === 'path') continue
+    if (k === 'path' || k === '...path') continue
     if (Array.isArray(v)) {
       for (const item of v) search.append(k, item)
     } else if (v != null) {
