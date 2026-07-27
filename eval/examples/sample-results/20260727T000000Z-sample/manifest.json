@@ -1,0 +1,65 @@
+{
+  "schema_version": "1",
+  "tool_version": "0.4.0",
+  "run_id": "20260727T000000Z-sample",
+  "started_at": "2026-07-27T00:00:00Z",
+  "finished_at": "2026-07-27T00:05:00Z",
+  "python_version": "3.12.3 (main, Jun 19 2026, 12:46:00) [GCC 13.3.0]",
+  "dataset_path": "/home/chad/.treehouse/repo-scout-8e662e/3/repo-scout/eval/datasets/v1.yaml",
+  "dataset_version": "1",
+  "dataset_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "dataset_case_count": 2,
+  "target_label": "local",
+  "target_host": "http://localhost:8080",
+  "min_score_label": 0.5,
+  "min_score_label_verified": false,
+  "repo": "zohan20050521-sudo/repo-scout",
+  "repo_id": 4,
+  "repo_default_branch": "main",
+  "repo_head_commit": "unknown",
+  "indexed": true,
+  "index_file_count": 4,
+  "index_chunk_count": 163,
+  "judge_enabled": false,
+  "judge_prompt_version": null,
+  "run_params": {
+    "selected_case_count": 2,
+    "repetitions": 1,
+    "concurrency": 1,
+    "seed": null,
+    "fail_fast": false,
+    "only_cases": [],
+    "only_categories": [],
+    "thresholds": [
+      0.5,
+      0.55,
+      0.6,
+      0.65,
+      0.7,
+      0.75,
+      0.8,
+      0.85
+    ],
+    "request_pause_s": 1.0,
+    "retry": {
+      "max_attempts": 3,
+      "backoff_s": 2.0,
+      "jitter_s": 0.5,
+      "retry_statuses": [
+        429,
+        502,
+        503,
+        504
+      ]
+    },
+    "prepare": {
+      "auto_register": true,
+      "auto_index": true,
+      "allow_reindex": false,
+      "require_index": true
+    },
+    "target_label": "local"
+  },
+  "case_count": 2,
+  "failed_case_count": 0
+}

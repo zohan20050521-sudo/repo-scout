@@ -1,0 +1,36 @@
+# 多 target 横向对比示例(Issue #4 方案 B)。
+#
+# 用法:操作者自行启动两个评测专用后端实例,分别设置不同的 RAG_MIN_SCORE,
+# 再用本配置对同一数据集跑两遍并横向比较。
+#
+# 重要边界:
+# - min_score_label 只是操作者声明的实验标签,REST API 不暴露运行时阈值,
+#   报告会注明「未由服务端证明」;
+# - 本工具不会自行启动/停止后端、不改环境变量、不操作数据库;
+# - 两个实例应使用各自独立的数据环境,避免互相干扰。
+
+dataset: datasets/v1.yaml
+repo: zohan20050521-sudo/repo-scout
+output_dir: results
+
+targets:
+  - label: minscore-050
+    base_url: http://localhost:18050
+    min_score_label: 0.50
+  - label: minscore-075
+    base_url: http://localhost:18075
+    min_score_label: 0.75
+
+prepare:
+  auto_register: true
+  auto_index: true
+  allow_reindex: false
+  require_index: true
+
+concurrency: 1
+repetitions: 1
+request_pause_s: 1.0
+thresholds: [0.50, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85]
+
+judge:
+  enabled: false
