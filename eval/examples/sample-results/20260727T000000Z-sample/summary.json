@@ -1,0 +1,184 @@
+{
+  "record_count": 2,
+  "attempted_count": 2,
+  "scored_count": 2,
+  "success_count": 2,
+  "success_rate": 1.0,
+  "error_code_counts": {},
+  "retry_total": 0,
+  "latency_ms": {
+    "p50": 12394.0,
+    "p95": 12394.0,
+    "mean": 7333.0,
+    "max": 12394.0
+  },
+  "retrieval": {
+    "case_count": 1,
+    "citation_hit": 1.0,
+    "source_recall": 1.0,
+    "citation_precision_proxy": 0.25,
+    "mrr": 0.5,
+    "mean_top_score": 0.8645,
+    "mean_expected_source_max_score": 0.7995,
+    "mean_citation_count": 4.0,
+    "empty_citation_rate": 0.0
+  },
+  "no_evidence": {
+    "case_count": 1,
+    "false_positive_retrieval_rate": 1.0,
+    "mean_top_score": 0.7734,
+    "top_scores": [
+      0.7734
+    ]
+  },
+  "answer": {
+    "keyword_case_count": 2,
+    "keyword_coverage_proxy": 1.0,
+    "keyword_all_hit_rate": 1.0,
+    "forbidden_case_count": 1,
+    "forbidden_claim_hit_rate": 1.0,
+    "empty_answer_rate": 0.0,
+    "short_answer_rate": 0.0,
+    "mean_answer_chars": 409.5
+  },
+  "by_category": {
+    "no_evidence": {
+      "attempted": 1,
+      "scored": 1,
+      "success_rate": 1.0,
+      "citation_hit": 0.0,
+      "keyword_coverage": 1.0,
+      "forbidden_claim_hit": 1.0,
+      "p50_latency_ms": 12394.0,
+      "p95_latency_ms": 12394.0
+    },
+    "rag_fact": {
+      "attempted": 1,
+      "scored": 1,
+      "success_rate": 1.0,
+      "citation_hit": 1.0,
+      "keyword_coverage": 1.0,
+      "forbidden_claim_hit": 0.0,
+      "p50_latency_ms": 2272.0,
+      "p95_latency_ms": 2272.0
+    }
+  },
+  "composite": {
+    "value": 0.8,
+    "weights": {
+      "citation_hit": 0.3,
+      "keyword_coverage": 0.4,
+      "no_evidence_clean": 0.2,
+      "success_rate": 0.1
+    },
+    "parts": {
+      "citation_hit": 1.0,
+      "keyword_coverage": 1.0,
+      "no_evidence_clean": 0.0,
+      "success_rate": 1.0
+    },
+    "note": "composite 只是上述分项的加权和,权重人为设定;判断效果请看原始分项。"
+  },
+  "proxy_note": "keyword_coverage / citation_precision_proxy 等均为基于人工标注的 deterministic proxy,不等于事实正确率或语义相关性真值。",
+  "threshold_curve": [
+    {
+      "threshold": 0.5,
+      "evidence_cases": 1,
+      "evidence_retained_hit": 1.0,
+      "expected_source_recall_proxy": 1.0,
+      "no_evidence_cases": 1,
+      "no_evidence_false_positive_rate": 1.0,
+      "avg_retained_citations": 4.0,
+      "empty_retrieval_rate": 0.0,
+      "balanced_f1": 0.0,
+      "left_truncated": true
+    },
+    {
+      "threshold": 0.55,
+      "evidence_cases": 1,
+      "evidence_retained_hit": 1.0,
+      "expected_source_recall_proxy": 1.0,
+      "no_evidence_cases": 1,
+      "no_evidence_false_positive_rate": 1.0,
+      "avg_retained_citations": 4.0,
+      "empty_retrieval_rate": 0.0,
+      "balanced_f1": 0.0,
+      "left_truncated": true
+    },
+    {
+      "threshold": 0.6,
+      "evidence_cases": 1,
+      "evidence_retained_hit": 1.0,
+      "expected_source_recall_proxy": 1.0,
+      "no_evidence_cases": 1,
+      "no_evidence_false_positive_rate": 1.0,
+      "avg_retained_citations": 4.0,
+      "empty_retrieval_rate": 0.0,
+      "balanced_f1": 0.0,
+      "left_truncated": true
+    },
+    {
+      "threshold": 0.65,
+      "evidence_cases": 1,
+      "evidence_retained_hit": 1.0,
+      "expected_source_recall_proxy": 1.0,
+      "no_evidence_cases": 1,
+      "no_evidence_false_positive_rate": 1.0,
+      "avg_retained_citations": 4.0,
+      "empty_retrieval_rate": 0.0,
+      "balanced_f1": 0.0,
+      "left_truncated": true
+    },
+    {
+      "threshold": 0.7,
+      "evidence_cases": 1,
+      "evidence_retained_hit": 1.0,
+      "expected_source_recall_proxy": 1.0,
+      "no_evidence_cases": 1,
+      "no_evidence_false_positive_rate": 1.0,
+      "avg_retained_citations": 4.0,
+      "empty_retrieval_rate": 0.0,
+      "balanced_f1": 0.0,
+      "left_truncated": true
+    },
+    {
+      "threshold": 0.75,
+      "evidence_cases": 1,
+      "evidence_retained_hit": 1.0,
+      "expected_source_recall_proxy": 1.0,
+      "no_evidence_cases": 1,
+      "no_evidence_false_positive_rate": 1.0,
+      "avg_retained_citations": 4.0,
+      "empty_retrieval_rate": 0.0,
+      "balanced_f1": 0.0,
+      "left_truncated": true
+    },
+    {
+      "threshold": 0.8,
+      "evidence_cases": 1,
+      "evidence_retained_hit": 0.0,
+      "expected_source_recall_proxy": 0.0,
+      "no_evidence_cases": 1,
+      "no_evidence_false_positive_rate": 0.0,
+      "avg_retained_citations": 0.5,
+      "empty_retrieval_rate": 0.5,
+      "balanced_f1": 0.0,
+      "left_truncated": true
+    },
+    {
+      "threshold": 0.85,
+      "evidence_cases": 1,
+      "evidence_retained_hit": 0.0,
+      "expected_source_recall_proxy": 0.0,
+      "no_evidence_cases": 1,
+      "no_evidence_false_positive_rate": 0.0,
+      "avg_retained_citations": 0.5,
+      "empty_retrieval_rate": 0.5,
+      "balanced_f1": 0.0,
+      "left_truncated": true
+    }
+  ],
+  "threshold_note": "阈值曲线为左截断:后端已按运行时 RAG_MIN_SCORE 过滤候选,低于该阈值的候选不可见,本曲线只反映在已返回 citations 上继续提高阈值的影响。",
+  "threshold_suggestion": "本次数据下 balanced_f1 最高点为 threshold=0.50(evidence_retained_hit=1.00,no_evidence_false_positive_rate=1.00);该结论仅限本数据集与本次 run,且受左截断限制,不作为通用最优阈值。",
+  "pollution": null
+}

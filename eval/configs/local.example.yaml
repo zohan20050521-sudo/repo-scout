@@ -1,0 +1,37 @@
+# 本地单 target 评测配置示例。
+# 复制为 configs/local.yaml 后使用:repo-scout-eval run --config configs/local.yaml
+# 凭据不写在这里:base_url 可留空由 REPO_SCOUT_BASE_URL 提供,
+# 门禁 key 只从 REPO_SCOUT_INTERNAL_KEY 读取,超时可用 REPO_SCOUT_REQUEST_TIMEOUT 覆盖。
+
+dataset: datasets/v1.yaml
+repo: zohan20050521-sudo/repo-scout
+output_dir: results
+
+targets:
+  - label: local
+    # base_url: http://localhost:8080   # 留空则取 REPO_SCOUT_BASE_URL,默认 http://localhost:8080
+    # min_score_label: 0.50             # 操作者声明的实验标签,API 无法验证
+
+prepare:
+  auto_register: true
+  auto_index: true
+  allow_reindex: false   # 默认不重建已存在索引,避免每次运行重复花成本
+  require_index: true
+
+concurrency: 1           # 多轮 / pollution 配对必须串行
+repetitions: 1
+request_pause_s: 1.0     # 相邻请求间隔,降低 GitHub / DeepSeek 限流概率
+fail_fast: false
+# seed: 20260727         # 固定 case 执行顺序(不保证模型输出确定)
+# only_categories: [rag_fact, no_evidence]
+# only_cases: [rag-fact-error-codes]
+
+retry:
+  max_attempts: 3        # 仅 429/502/503/504 与网络错误重试;确定性 4xx 不重试
+  backoff_s: 2.0
+  jitter_s: 0.5
+
+thresholds: [0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85]
+
+judge:
+  enabled: false         # 可选 LLM judge 默认关闭,不作为通过门槛,也不能做 CI gate

@@ -23,7 +23,7 @@
 | 向量化(Embedding) | LangChain4j 进程内 ONNX 模型 `bge-small-zh` |
 | 业务数据 | MySQL |
 | 会话记忆 | Redis |
-| 效果评估 | Python 批量评测脚本 |
+| 效果评估 | Python 黑盒评测工具([eval/](eval/),Python 3.11+ / httpx / Pydantic) |
 | 前端框架 | Vue 3 + TypeScript + Vite |
 | 前端 UI | Element Plus |
 
@@ -175,6 +175,29 @@ curl -s -X POST http://localhost:8080/api/repos/1/report
 
 检索条数与相似度阈值由 `RAG_TOP_K` / `RAG_MIN_SCORE` 控制(见上方环境变量表)。
 
+## 效果评测(v0.4)
+
+`eval/` 是一套独立的 Python 黑盒评测工具:以外部观察者身份**只调用公开 REST API**,
+用版本化 YAML 数据集量化 RAG 检索命中、回答任务完成度、多轮历史摘录影响、`minScore` 阈值曲线与延迟。
+它不读 MySQL/Redis/服务端日志,也不解析 Agent 工具轨迹(当前无该 API)。
+
+```bash
+cd eval
+python -m venv .venv && source .venv/bin/activate
+python -m pip install -e '.[dev]'
+
+repo-scout-eval validate --dataset datasets/v1.yaml     # 离线校验数据集
+cp configs/local.example.yaml configs/local.yaml
+export REPO_SCOUT_BASE_URL=http://localhost:8080        # 门禁开启时另配 REPO_SCOUT_INTERNAL_KEY
+repo-scout-eval run --config configs/local.yaml         # 一条命令跑完整评测
+```
+
+产物为逐题 `cases.jsonl` + `summary.json/md` + tidy CSV(阈值曲线、污染配对),
+可用 `summarize` 脱网重算、`compare` 对比两个 run 或两个 target。
+
+指标是基于人工标注的 **deterministic proxy**,不等于事实正确率;阈值曲线受服务端阈值以下候选不可见的
+**左截断**限制。指标公式、数据集 schema、观测边界与凭据约定见 [eval/README.md](eval/README.md)。
+
 ## Docker 一键启动
 
 在干净环境用 Docker 一键拉起 **应用 + MySQL + Redis**,无需本地安装 JDK / Maven。
@@ -227,15 +250,18 @@ DEEPSEEK_API_KEY=x docker compose down -v   # 额外删除数据卷:MySQL 业务
 
 ## 项目状态
 
-✅ **v0.3.5 后端已完成，v0.4 Vue 产品前端已完成**
+✅ **v0.3.5 后端已完成，v0.4 Vue 产品前端 + Python 评测体系已完成**
 
 | 版本 | 内容 | 状态 |
 | --- | --- | --- |
 | v0.1 | 项目骨架、DeepSeek 接入、基础对话 + 会话记忆 | ✅ 已完成 |
 | v0.2 | GitHub 工具集(目录树/README/issues/commits),Agent 自主规划调用 | ✅ 已完成 |
 | v0.3 | 文档向量化 + RAG 问答、仓库分析报告 | ✅ 已完成 |
-| v0.3.5 | 公网门禁、统一接口契约 | ✅ 已完成 |
-| v0.4 | Vue 3 产品前端(接入→索引→问答→报告完整闭环) | ✅ 已完成 |
+| v0.3.5 | 公网门禁、统一接口契约、索引状态与结构化 RAG 引用 | ✅ 已完成 |
+| v0.4 | Vue 3 产品前端(接入→索引→问答→报告完整闭环)+ Python 黑盒评测体系 | ✅ 已完成 |
+
+待处理的 backlog:注入摘录随会话记忆累积(#3)、`RAG_MIN_SCORE` 默认值需按评测数据调参(#4)。
+两项**均未修复**——评测体系已产出基线数据,阈值默认值仍为 `0.5`。
 
 详细需求见 [docs/requirements.md](docs/requirements.md),API 契约见 [docs/api.md](docs/api.md)。
 

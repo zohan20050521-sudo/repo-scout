@@ -1,0 +1,54 @@
+name: Eval Suite
+
+# Python 黑盒评测工具的质量门禁:只跑 lint / type / test / 离线 summarize。
+# 全程无 MySQL、Redis、外网与真实 key —— live 指标波动大,不作为 CI 硬阈值。
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'eval/**'
+      - '.github/workflows/eval.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'eval/**'
+      - '.github/workflows/eval.yml'
+  workflow_dispatch: {}
+
+jobs:
+  eval:
+    name: Lint & Test (eval)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: eval
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install
+        run: python -m pip install -e '.[dev]'
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+      - name: Mypy
+        run: mypy src
+
+      - name: Pytest
+        run: pytest
+
+      - name: Validate dataset (offline)
+        run: repo-scout-eval validate --dataset datasets/v1.yaml
+
+      - name: Summarize sample results (offline)
+        run: repo-scout-eval summarize examples/sample-results/20260727T000000Z-sample --dataset datasets/v1.yaml

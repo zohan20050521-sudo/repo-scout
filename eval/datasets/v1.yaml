@@ -1,0 +1,467 @@
+version: "1"
+repo: zohan20050521-sudo/repo-scout
+description: >-
+  repo-scout 自评测数据集 v1。预期基于公开 main(基线 1f69151)的 README.md 与 docs/ 三个文档核实,
+  不含凭据。动态信息(issues / commits)只用形状约束,不写死会过期的答案。
+  索引范围只覆盖 README + docs/**(见 docs/design.md 3.5),故 source_paths 只允许出现这四个文件。
+
+cases:
+  # ---------- rag_fact:答案明确写在 README/docs,要求 citation 命中预期路径 ----------
+  - id: rag-fact-error-codes
+    category: rag_fact
+    question: 这个项目的统一错误码有哪些?请列出错误码名称。
+    expected:
+      source_paths:
+        - docs/api.md
+      answer_keywords:
+        - INVALID_PARAM
+        - REPO_NOT_FOUND
+        - LLM_UNAVAILABLE
+      min_answer_chars: 40
+    notes: docs/api.md「错误码表」共六个码,含 v0.3.5 新增 UNAUTHORIZED。
+
+  - id: rag-fact-min-score-default
+    category: rag_fact
+    question: 环境变量 RAG_MIN_SCORE 的默认值是多少?它控制什么?
+    expected:
+      source_paths:
+        - README.md
+      answer_keywords:
+        - "0.5"
+        - 相似度
+      min_answer_chars: 30
+    notes: README 环境变量表:RAG_MIN_SCORE 默认 0.5,余弦相似度过滤阈值。
+
+  - id: rag-fact-memory-window
+    category: rag_fact
+    question: 会话记忆的窗口上限和过期时间默认是多少?
+    expected:
+      source_paths:
+        - README.md
+      answer_keywords:
+        - "20"
+        - 24h
+      min_answer_chars: 30
+    notes: README:CHAT_MEMORY_MAX_MESSAGES=20、CHAT_MEMORY_TTL=24h。
+
+  - id: rag-fact-report-sections
+    category: rag_fact
+    question: 仓库导读报告固定包含哪几个小节?按顺序说明。
+    expected:
+      source_paths:
+        - docs/api.md
+      answer_keywords:
+        - 项目定位
+        - 技术栈
+        - 上手指引
+        - 近期动向
+      min_answer_chars: 40
+    notes: docs/api.md report 端点:五个固定二级小节,顺序固定。
+
+  - id: rag-fact-embedding-model
+    category: rag_fact
+    question: 项目用什么模型做文档向量化?为什么选它?
+    expected:
+      source_paths:
+        - docs/design.md
+      allowed_source_paths:
+        - docs/design.md
+        - README.md
+      answer_keywords:
+        - bge-small-zh
+      min_answer_chars: 40
+    notes: design.md 6.3 与 README 技术栈表均写明进程内 ONNX bge-small-zh。
+
+  - id: rag-fact-chat-message-limit
+    category: rag_fact
+    question: POST /api/chat 的 message 字段有什么长度限制,超长会返回什么?
+    expected:
+      source_paths:
+        - docs/api.md
+      answer_keywords:
+        - "4000"
+        - INVALID_PARAM
+      min_answer_chars: 30
+    notes: docs/api.md 请求体表:message ≤ 4000 字符,超长 400 INVALID_PARAM。
+
+  - id: rag-fact-index-scope
+    category: rag_fact
+    question: 触发文档索引时,服务端会拉取仓库里哪些文件?
+    expected:
+      source_paths:
+        - docs/api.md
+      allowed_source_paths:
+        - docs/api.md
+        - docs/design.md
+        - README.md
+      answer_keywords:
+        - README
+        - docs
+      min_answer_chars: 40
+    notes: api.md index 端点与 design.md 3.5:README + docs/ 下扩展名白名单文档。
+
+  - id: rag-fact-repo-binding-conflict
+    category: rag_fact
+    question: 已经绑定过仓库的会话,再传一个不同的 repoId 会发生什么?
+    expected:
+      source_paths:
+        - docs/api.md
+      answer_keywords:
+        - "400"
+        - 新开
+      min_answer_chars: 30
+    notes: docs/api.md「仓库绑定」:绑定冲突 400 INVALID_PARAM,提示新开会话切换。
+
+  - id: rag-fact-session-storage
+    category: rag_fact
+    question: 会话记忆存在哪里?为什么不放在进程内存?
+    expected:
+      source_paths:
+        - docs/design.md
+      allowed_source_paths:
+        - docs/design.md
+        - README.md
+      answer_keywords:
+        - Redis
+      min_answer_chars: 40
+    notes: design.md 5.1:存 Redis 而非进程内,保证重启后上下文仍在。
+
+  - id: rag-fact-internal-key-header
+    category: rag_fact
+    question: 内部 API 门禁开启后,请求要带哪个 HTTP header?哪个接口永远公开?
+    expected:
+      source_paths:
+        - docs/api.md
+      allowed_source_paths:
+        - docs/api.md
+        - README.md
+        - docs/design.md
+      answer_keywords:
+        - X-Repo-Scout-Internal-Key
+        - /api/health
+      min_answer_chars: 40
+    notes: docs/api.md「内部 API 门禁」:仅精确 GET /api/health 公开。
+
+  # ---------- rag_multi_source:需要综合两个及以上文档来源 ----------
+  - id: rag-multi-threshold-and-topk
+    category: rag_multi_source
+    question: 检索阈值和返回条数分别由哪些配置控制?默认值是多少?它们在设计上各起什么作用?
+    expected:
+      source_paths:
+        - README.md
+        - docs/design.md
+      answer_keywords:
+        - RAG_MIN_SCORE
+        - RAG_TOP_K
+        - "0.5"
+        - "4"
+      min_answer_chars: 60
+    notes: README 环境变量表给默认值,design.md 3.5.1 给检索顺序与作用。
+
+  - id: rag-multi-error-contract-and-principle
+    category: rag_multi_source
+    question: 模型检索不到依据时应该怎么回答?这条原则在接口契约上如何体现?
+    expected:
+      source_paths:
+        - docs/requirements.md
+        - docs/api.md
+      allowed_source_paths:
+        - docs/requirements.md
+        - docs/api.md
+        - docs/design.md
+      answer_keywords:
+        - 不编造
+      forbidden_claims:
+        - 会自动生成一个推测答案
+      min_answer_chars: 60
+    notes: requirements.md 错误处理原则 + api.md sources 为 [] 的降级契约。
+
+  - id: rag-multi-storage-split
+    category: rag_multi_source
+    question: MySQL 和 Redis 各存什么数据?为什么这样分工?
+    expected:
+      source_paths:
+        - docs/design.md
+        - README.md
+      answer_keywords:
+        - MySQL
+        - Redis
+        - 会话
+      min_answer_chars: 60
+    notes: design.md 5.1/5.2/6.4 + README 环境要求。
+
+  - id: rag-multi-index-then-chat
+    category: rag_multi_source
+    question: 为什么建议先触发索引再问答?没索引时对话会怎样?
+    expected:
+      source_paths:
+        - docs/api.md
+        - docs/design.md
+      allowed_source_paths:
+        - docs/api.md
+        - docs/design.md
+        - README.md
+      answer_keywords:
+        - 索引
+      forbidden_claims:
+        - 未索引时会返回 500
+        - 未索引时会自动索引
+      min_answer_chars: 60
+    notes: api.md chat 说明「未建索引时自动退化为纯工具模式,不报错」;design.md 3.5.1「不做自动索引」。
+
+  # ---------- tool_live:更适合 Agent 工具的实时数据;无轨迹 API,只评任务完成度 ----------
+  - id: tool-live-open-issues
+    category: tool_live
+    question: 这个仓库当前有哪些 open 的 issue?请给出编号和标题。
+    expected:
+      answer_keywords:
+        - "#"
+      forbidden_claims:
+        - 我无法访问 GitHub
+      min_answer_chars: 40
+    notes: 形状约束(出现 issue 编号)而非写死标题,避免过期。不声称验证了工具调用。
+
+  - id: tool-live-recent-commits
+    category: tool_live
+    question: 最近的几次提交分别做了什么?请给出提交信息。
+    expected:
+      answer_keywords:
+        - 提交
+      forbidden_claims:
+        - 我无法访问 GitHub
+      min_answer_chars: 40
+    notes: 只要求答案给出可读的提交摘要,不写死 sha。
+
+  - id: tool-live-directory-structure
+    category: tool_live
+    question: 这个仓库的顶层目录结构大致是怎样的?
+    expected:
+      answer_keywords:
+        - src
+      forbidden_claims:
+        - 该仓库没有源码目录
+      min_answer_chars: 40
+    notes: main 上确有 src/、docs/、.github/ 等顶层项。
+
+  - id: tool-live-tech-stack-overview
+    category: tool_live
+    question: 这个项目用什么技术栈?后端框架和对话模型分别是什么?
+    expected:
+      answer_keywords:
+        - Spring Boot
+        - DeepSeek
+      min_answer_chars: 40
+    notes: README 技术栈表 + 工具可读 README,两条路径都能作答。
+
+  - id: tool-live-how-to-run
+    category: tool_live
+    question: 我要在本地把这个项目跑起来,需要哪些前置条件?
+    expected:
+      answer_keywords:
+        - JDK
+        - DEEPSEEK_API_KEY
+      min_answer_chars: 60
+    notes: README「环境要求」:JDK 17、Maven、MySQL、Redis,DEEPSEEK_API_KEY 必填。
+
+  # ---------- no_evidence:仓库文档无依据,检验高分误召回与不乱编 ----------
+  - id: no-evidence-distributed-tx
+    category: no_evidence
+    question: 这个项目的分布式事务是用 Seata 还是 TCC 实现的?具体在哪个类里?
+    expected:
+      expect_no_citations: true
+      forbidden_claims:
+        - 使用 Seata
+        - 采用 TCC
+      answer_keywords:
+        - 未
+      min_answer_chars: 20
+    notes: 仓库无分布式事务实现。Issue #4 实测该类问题 topScore 仍可达 0.758。
+
+  - id: no-evidence-kafka
+    category: no_evidence
+    question: 项目里 Kafka 的 topic 和消费组是怎么配置的?
+    expected:
+      expect_no_citations: true
+      forbidden_claims:
+        - topic 名为
+        - 消费组配置在
+      min_answer_chars: 20
+    notes: 仓库不含任何消息队列组件。
+
+  - id: no-evidence-k8s-hpa
+    category: no_evidence
+    question: 这个项目的 Kubernetes HPA 扩缩容策略是怎么设置的?
+    expected:
+      expect_no_citations: true
+      forbidden_claims:
+        - HPA 配置为
+        - 副本数上限为
+      min_answer_chars: 20
+    notes: 仓库只有 Dockerfile/compose,无 K8s 清单。
+
+  - id: no-evidence-payment-module
+    category: no_evidence
+    question: 支付模块的对账流程是怎样的?退款接口在哪里?
+    expected:
+      expect_no_citations: true
+      forbidden_claims:
+        - 退款接口位于
+        - 对账流程分为
+      min_answer_chars: 20
+    notes: 与本仓库业务完全无关的问题。
+
+  - id: no-evidence-graphql-schema
+    category: no_evidence
+    question: 项目暴露的 GraphQL schema 有哪些 query 和 mutation?
+    expected:
+      expect_no_citations: true
+      forbidden_claims:
+        - schema 定义了
+        - mutation 包括
+      min_answer_chars: 20
+    notes: 项目只有 REST API,无 GraphQL。
+
+  - id: no-evidence-android-client
+    category: no_evidence
+    question: 这个项目的 Android 客户端的最低支持版本是多少?
+    expected:
+      expect_no_citations: true
+      forbidden_claims:
+        - 最低支持 Android
+        - minSdkVersion
+      min_answer_chars: 20
+    notes: 无移动端客户端。
+
+  # ---------- conversation:同 session 指代追问 ----------
+  - id: conv-error-code-followup
+    category: conversation
+    turns:
+      - question: 这个项目的统一错误响应结构是什么样的?
+        expected:
+          source_paths:
+            - docs/api.md
+          answer_keywords:
+            - code
+            - message
+          min_answer_chars: 30
+      - question: 刚才提到的那个结构里,参数不合法用的是哪个错误码?对应哪个 HTTP 状态码?
+        expected:
+          answer_keywords:
+            - INVALID_PARAM
+            - "400"
+          min_answer_chars: 20
+    notes: 第二轮靠指代「刚才提到的那个结构」验证会话记忆。
+
+  - id: conv-index-endpoint-followup
+    category: conversation
+    turns:
+      - question: 怎么触发仓库的文档向量化索引?
+        expected:
+          answer_keywords:
+            - index
+          min_answer_chars: 30
+      - question: 那个接口重复调用会怎样?会不会产生重复数据?
+        expected:
+          answer_keywords:
+            - 幂等
+          forbidden_claims:
+            - 会产生重复数据
+          min_answer_chars: 20
+    notes: api.md index 端点:幂等重建,doc_chunk 总数不因重复调用增长。
+
+  - id: conv-memory-config-followup
+    category: conversation
+    turns:
+      - question: 会话记忆是怎么控制上下文大小的?
+        expected:
+          answer_keywords:
+            - 窗口
+          min_answer_chars: 30
+      - question: 它的默认值是多少?过期时间呢?
+        expected:
+          answer_keywords:
+            - "20"
+            - 24h
+          min_answer_chars: 20
+    notes: 第二轮用「它」指代上一轮的窗口机制。
+
+  # ---------- pollution_pair:Issue #3 专项,fresh vs polluted 配对 ----------
+  - id: pollution-error-codes
+    category: pollution_pair
+    question: 这个项目的统一错误码有哪些?请列出错误码名称。
+    priming_questions:
+      - Docker 一键启动需要哪些前置条件?
+      - 会话记忆的过期时间默认是多久?
+      - bge-small-zh 的向量维度是多少?
+    expected:
+      source_paths:
+        - docs/api.md
+      answer_keywords:
+        - INVALID_PARAM
+        - REPO_NOT_FOUND
+        - LLM_UNAVAILABLE
+      min_answer_chars: 40
+    notes: priming 问题分别命中 README / design.md,与 B 的 docs/api.md 错误码表无关。
+
+  - id: pollution-report-sections
+    category: pollution_pair
+    question: 仓库导读报告固定包含哪几个小节?按顺序说明。
+    priming_questions:
+      - MySQL 的 doc_chunk 表有哪些字段?
+      - 项目为什么选择 DeepSeek 作为对话模型?
+    expected:
+      source_paths:
+        - docs/api.md
+      answer_keywords:
+        - 项目定位
+        - 技术栈
+        - 上手指引
+        - 近期动向
+      min_answer_chars: 40
+    notes: priming 命中 design.md 存储与选型章节。
+
+  - id: pollution-min-score
+    category: pollution_pair
+    question: 环境变量 RAG_MIN_SCORE 的默认值是多少?它控制什么?
+    priming_questions:
+      - 四个 GitHub 工具分别叫什么名字?
+      - 报告生成为什么不经过会话记忆?
+      - 一期为什么不做前端?
+    expected:
+      source_paths:
+        - README.md
+      answer_keywords:
+        - "0.5"
+        - 相似度
+      min_answer_chars: 30
+    notes: priming 集中命中 design.md 3.4/3.5/6.5。
+
+  - id: pollution-no-evidence-tx
+    category: pollution_pair
+    question: 这个项目的分布式事务是用 Seata 还是 TCC 实现的?具体在哪个类里?
+    priming_questions:
+      - Flyway 迁移脚本放在哪个目录?
+      - GitHub API 限流时工具会返回什么?
+    expected:
+      expect_no_citations: true
+      forbidden_claims:
+        - 使用 Seata
+        - 采用 TCC
+      answer_keywords:
+        - 未
+      min_answer_chars: 20
+    notes: 检验被污染上下文是否更容易让无据问题被编造出答案。
+
+  # ---------- report_structure:可选,只验结构与耗时,不做主质量分 ----------
+  - id: report-five-sections
+    category: report_structure
+    question: (POST /api/repos/{id}/report,不带问题)
+    expected:
+      require_markdown_sections:
+        - "## 项目定位"
+        - "## 技术栈"
+        - "## 目录结构解读"
+        - "## 上手指引"
+        - "## 近期动向"
+      min_answer_chars: 200
+    notes: 只校验五节标题齐全与耗时,不参与 RAG 主指标。

@@ -50,6 +50,26 @@ buildNumber.properties
 # OS
 .DS_Store
 
+# Python(eval 评测工具)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# 评测运行结果:体积大、含 live 原文,只提交 eval/examples/sample-results
+eval/results/
+eval/configs/local.yaml
+
 # Node / Vite (frontend)
 web/node_modules/
 web/dist/
