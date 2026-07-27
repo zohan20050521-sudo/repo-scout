@@ -82,7 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const ct = upstream.headers['content-type']
     if (ct) res.setHeader('content-type', ct)
     res.send(upstream.body)
-  } catch (_err) {
+  } catch {
     // 不向浏览器暴露后端地址或错误细节
     res.status(502).json({ code: 'INTERNAL_ERROR', message: '请求后端失败，请稍后重试' })
   }
