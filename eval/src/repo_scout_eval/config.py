@@ -19,7 +19,7 @@ ENV_TIMEOUT = "REPO_SCOUT_REQUEST_TIMEOUT"
 DEFAULT_BASE_URL = "http://localhost:8080"
 DEFAULT_TIMEOUT_S = 120.0
 DEFAULT_THRESHOLDS: tuple[float, ...] = (0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85)
-"""离线阈值重放的候选阈值;首值与后端默认 RAG_MIN_SCORE=0.5 对齐。"""
+"""离线阈值重放候选集;保留 0.50 起点以覆盖历史默认值,当前后端默认为 0.75。"""
 
 INTERNAL_KEY_HEADER = "X-Repo-Scout-Internal-Key"
 MASK = "***"

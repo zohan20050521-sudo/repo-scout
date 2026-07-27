@@ -50,4 +50,4 @@ app:
     chunk-size: ${RAG_CHUNK_SIZE:400}
     chunk-overlap: ${RAG_CHUNK_OVERLAP:80}
     top-k: ${RAG_TOP_K:4}
-    min-score: ${RAG_MIN_SCORE:0.5}
+    min-score: ${RAG_MIN_SCORE:0.75}

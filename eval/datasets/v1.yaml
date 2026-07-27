@@ -1,7 +1,7 @@
 version: "1"
 repo: zohan20050521-sudo/repo-scout
 description: >-
-  repo-scout 自评测数据集 v1。预期基于公开 main(基线 1f69151)的 README.md 与 docs/ 三个文档核实,
+  repo-scout 自评测数据集 v1。预期基于公开 main(本次调参基线 3ce9fc6)的 README.md 与 docs/ 三个文档核实,
   不含凭据。动态信息(issues / commits)只用形状约束,不写死会过期的答案。
   索引范围只覆盖 README + docs/**(见 docs/design.md 3.5),故 source_paths 只允许出现这四个文件。
 
@@ -27,10 +27,10 @@ cases:
       source_paths:
         - README.md
       answer_keywords:
-        - "0.5"
+        - "0.75"
         - 相似度
       min_answer_chars: 30
-    notes: README 环境变量表:RAG_MIN_SCORE 默认 0.5,余弦相似度过滤阈值。
+    notes: README 环境变量表:RAG_MIN_SCORE 默认 0.75,余弦相似度过滤阈值。
 
   - id: rag-fact-memory-window
     category: rag_fact
@@ -153,7 +153,7 @@ cases:
       answer_keywords:
         - RAG_MIN_SCORE
         - RAG_TOP_K
-        - "0.5"
+        - "0.75"
         - "4"
       min_answer_chars: 60
     notes: README 环境变量表给默认值,design.md 3.5.1 给检索顺序与作用。
@@ -275,7 +275,7 @@ cases:
       answer_keywords:
         - 未
       min_answer_chars: 20
-    notes: 仓库无分布式事务实现。Issue #4 实测该类问题 topScore 仍可达 0.758。
+    notes: 仓库无分布式事务实现。本次低阈值 run 观测该类问题 topScore 为 0.7734,仅作标注说明。
 
   - id: no-evidence-kafka
     category: no_evidence
@@ -431,10 +431,10 @@ cases:
       source_paths:
         - README.md
       answer_keywords:
-        - "0.5"
+        - "0.75"
         - 相似度
       min_answer_chars: 30
-    notes: priming 集中命中 design.md 3.4/3.5/6.5。
+    notes: priming 集中命中 design.md 3.4/3.5/6.5;默认值预期为 0.75。
 
   - id: pollution-no-evidence-tx
     category: pollution_pair

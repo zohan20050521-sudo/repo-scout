@@ -68,7 +68,7 @@ npm run dev                   # Vite dev server on http://localhost:5173
 | `RAG_CHUNK_SIZE` | 文档切分块大小(字符) | `400` |
 | `RAG_CHUNK_OVERLAP` | 相邻块重叠字符数 | `80` |
 | `RAG_TOP_K` | 每次检索返回的文档块条数(对话注入与报告摘录共用) | `4` |
-| `RAG_MIN_SCORE` | 检索命中的余弦相似度过滤阈值(低于则不注入) | `0.5` |
+| `RAG_MIN_SCORE` | 检索命中的余弦相似度过滤阈值(低于则不注入) | `0.75` |
 | `GITHUB_TOKEN` | GitHub API 鉴权 token(留空为匿名,限流阈值低) | 空 |
 | `GITHUB_BASE_URL` | GitHub API 端点 | `https://api.github.com` |
 | `GITHUB_TIMEOUT` | GitHub API 连接与读超时 | `10s` |
@@ -173,7 +173,7 @@ curl -s -X POST http://localhost:8080/api/repos/1/report
 # → {"repoId":1,"generatedAt":"2026-07-26T12:00:00","costMs":12450,"report":"## 项目定位\n……"}
 ```
 
-检索条数与相似度阈值由 `RAG_TOP_K` / `RAG_MIN_SCORE` 控制(见上方环境变量表)。
+检索条数与相似度阈值由 `RAG_TOP_K` / `RAG_MIN_SCORE` 控制(见上方环境变量表)。当前默认阈值为 `0.75`，评测候选曲线仍覆盖 `0.50` 至 `0.85`。
 
 ## 效果评测(v0.4)
 
@@ -260,8 +260,7 @@ DEEPSEEK_API_KEY=x docker compose down -v   # 额外删除数据卷:MySQL 业务
 | v0.3.5 | 公网门禁、统一接口契约、索引状态与结构化 RAG 引用 | ✅ 已完成 |
 | v0.4 | Vue 3 产品前端(接入→索引→问答→报告完整闭环)+ Python 黑盒评测体系 | ✅ 已完成 |
 
-待处理的 backlog:注入摘录随会话记忆累积(#3)、`RAG_MIN_SCORE` 默认值需按评测数据调参(#4)。
-两项**均未修复**——评测体系已产出基线数据,阈值默认值仍为 `0.5`。
+待处理的 backlog:注入摘录随会话记忆累积(#3)。`RAG_MIN_SCORE` 已根据当前 main 的 v1 评测数据从 `0.5` 调整为 `0.75`，Issue #4 已完成。
 
 详细需求见 [docs/requirements.md](docs/requirements.md),API 契约见 [docs/api.md](docs/api.md)。
 

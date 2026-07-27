@@ -172,7 +172,11 @@ def _render_threshold(points: list[ThresholdPoint]) -> str:
     body += f"\n\n> {TRUNCATION_WARNING}"
     if observed is not None:
         body += f"\n>\n> 本次 run 观测到的最低 citation score = {observed:.4f}。"
-    return body + f"\n\n{suggest_range(points)}\n\n本 PR 不修改后端默认 `RAG_MIN_SCORE=0.5`,不关闭 Issue #4。"
+    return body + (
+        f"\n\n{suggest_range(points)}\n\n"
+        "阈值重放仅提供证据,不在运行时修改服务端配置;当前后端默认 "
+        "`RAG_MIN_SCORE=0.75`,Issue #4 已按本次评测完成调参。"
+    )
 
 
 def _render_pollution(summary: dict[str, Any]) -> str:

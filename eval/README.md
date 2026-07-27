@@ -204,7 +204,7 @@ composite = 0.3×citation_hit + 0.4×keyword_coverage + 0.2×(1 - no_evidence_fp
 
 ### A. 离线阈值重放(默认执行)
 
-从一次 live run 的 citations 原始 score 重放候选阈值(默认 `0.50 … 0.85`,步长 0.05)。
+从一次 live run 的 citations 原始 score 重放候选阈值(`0.50 … 0.85`,步长 0.05;候选集保留历史默认值覆盖)。
 `retained(threshold)` = `score >= threshold` 的 citations(**等于阈值视为保留**)。每个阈值输出:
 
 | 列 | 含义 |
@@ -231,7 +231,7 @@ composite = 0.3×citation_hit + 0.4×keyword_coverage + 0.2×(1 - no_evidence_fp
 阈值数据同时输出 `threshold_curve.csv`(tidy CSV,便于自行绘图)、`summary.json` 的 `threshold_curve`
 与 `summary.md` 表格。不引入绘图库。
 
-**本工具只给数据和建议区间,不修改默认 `RAG_MIN_SCORE=0.5`,不关闭 Issue #4。**
+**本工具只给数据和建议区间,不会在运行时修改后端配置；当前仓库默认 `RAG_MIN_SCORE=0.75`，Issue #4 已按评测证据完成调参。**
 
 ## 可选 LLM Judge
 
