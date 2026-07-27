@@ -488,8 +488,10 @@ curl -s http://localhost:8080/api/repos \
 ```bash
 curl -s http://localhost:8080/api/repos/1 \
   -H 'X-Repo-Scout-Internal-Key: <internal-key>'
-curl -s http://localhost:8080/api/repos/999999   # → 404 REPO_NOT_FOUND \
+# → 404 REPO_NOT_FOUND
+curl -s http://localhost:8080/api/repos/999999 \
   -H 'X-Repo-Scout-Internal-Key: <internal-key>'
-curl -s http://localhost:8080/api/repos/abc      # → 400 INVALID_PARAM \
+# → 400 INVALID_PARAM
+curl -s http://localhost:8080/api/repos/abc \
   -H 'X-Repo-Scout-Internal-Key: <internal-key>'
 ```
