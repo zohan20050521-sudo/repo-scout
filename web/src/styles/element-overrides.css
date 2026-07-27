@@ -1,0 +1,69 @@
+/** Element Plus 主题对齐 tokens，避免默认亮蓝与产品调性冲突 */
+:root {
+  --el-color-primary: var(--rs-brand-500);
+  --el-color-primary-light-3: var(--rs-brand-300);
+  --el-color-primary-light-5: var(--rs-brand-200);
+  --el-color-primary-light-7: var(--rs-brand-100);
+  --el-color-primary-light-8: var(--rs-brand-100);
+  --el-color-primary-light-9: var(--rs-brand-50);
+  --el-color-primary-dark-2: var(--rs-brand-700);
+  --el-color-success: var(--rs-success-500);
+  --el-color-warning: var(--rs-warn-500);
+  --el-color-danger: var(--rs-danger-500);
+  --el-color-error: var(--rs-danger-500);
+  --el-text-color-primary: var(--rs-ink-800);
+  --el-text-color-regular: var(--rs-ink-700);
+  --el-text-color-secondary: var(--rs-ink-500);
+  --el-border-color: var(--rs-line-strong);
+  --el-border-color-light: var(--rs-line);
+  --el-border-color-lighter: var(--rs-line);
+  --el-fill-color-light: var(--rs-surface-muted);
+  --el-fill-color-blank: var(--rs-surface);
+  --el-border-radius-base: var(--rs-radius-sm);
+  --el-font-family: var(--rs-font-sans);
+  --el-font-size-base: var(--rs-text-base);
+}
+
+.el-button {
+  font-weight: 500;
+}
+
+.el-button:focus-visible {
+  box-shadow: var(--rs-focus-ring);
+}
+
+.el-input__wrapper,
+.el-textarea__inner {
+  box-shadow: 0 0 0 1px var(--rs-line-strong) inset;
+}
+
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus {
+  box-shadow:
+    0 0 0 1px var(--rs-brand-500) inset,
+    var(--rs-focus-ring);
+}
+
+.el-tag {
+  border-radius: var(--rs-radius-pill);
+  font-weight: 500;
+}
+
+.el-message {
+  border-radius: var(--rs-radius-md);
+  box-shadow: var(--rs-shadow-md);
+}
+
+.el-alert {
+  border-radius: var(--rs-radius-md);
+  padding: var(--rs-space-3) var(--rs-space-4);
+}
+
+.el-skeleton__item {
+  background: linear-gradient(
+    90deg,
+    var(--rs-surface-sunken) 25%,
+    var(--rs-surface-muted) 37%,
+    var(--rs-surface-sunken) 63%
+  );
+}

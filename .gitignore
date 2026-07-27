@@ -69,3 +69,12 @@ htmlcov/
 # 评测运行结果:体积大、含 live 原文,只提交 eval/examples/sample-results
 eval/results/
 eval/configs/local.yaml
+
+# Node / Vite (frontend)
+web/node_modules/
+web/dist/
+web/coverage/
+# 本地环境变量（.env.example 不在此列，应提交）
+web/.env
+web/.env.local
+web/.env.*.local

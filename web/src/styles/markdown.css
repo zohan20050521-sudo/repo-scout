@@ -1,0 +1,135 @@
+/** Markdown 正文排版：安静、克制、可长时间阅读 */
+.rs-markdown {
+  color: var(--rs-ink-800);
+  font-size: var(--rs-text-md);
+  line-height: var(--rs-leading-relaxed);
+  overflow-wrap: break-word;
+}
+
+.rs-markdown > *:first-child {
+  margin-top: 0;
+}
+
+.rs-markdown > *:last-child {
+  margin-bottom: 0;
+}
+
+.rs-markdown h1,
+.rs-markdown h2,
+.rs-markdown h3,
+.rs-markdown h4 {
+  margin: var(--rs-space-6) 0 var(--rs-space-3);
+  scroll-margin-top: calc(var(--rs-header-height) + var(--rs-space-4));
+}
+
+.rs-markdown h1 {
+  font-size: var(--rs-text-xl);
+}
+
+.rs-markdown h2 {
+  padding-bottom: var(--rs-space-2);
+  border-bottom: 1px solid var(--rs-line);
+  font-size: var(--rs-text-lg);
+}
+
+.rs-markdown h3 {
+  font-size: var(--rs-text-md);
+  color: var(--rs-ink-700);
+}
+
+.rs-markdown p {
+  margin: var(--rs-space-3) 0;
+}
+
+.rs-markdown ul,
+.rs-markdown ol {
+  margin: var(--rs-space-3) 0;
+  padding-left: var(--rs-space-6);
+}
+
+.rs-markdown li + li {
+  margin-top: var(--rs-space-1);
+}
+
+.rs-markdown blockquote {
+  margin: var(--rs-space-4) 0;
+  padding: var(--rs-space-2) var(--rs-space-4);
+  border-left: 3px solid var(--rs-brand-300);
+  background: var(--rs-info-50);
+  border-radius: 0 var(--rs-radius-sm) var(--rs-radius-sm) 0;
+  color: var(--rs-ink-700);
+}
+
+.rs-markdown code {
+  padding: 1px 5px;
+  background: var(--rs-surface-sunken);
+  border-radius: 4px;
+  font-size: 0.9em;
+  color: var(--rs-brand-700);
+}
+
+.rs-markdown pre.rs-code {
+  margin: var(--rs-space-4) 0;
+  padding: var(--rs-space-4);
+  background: var(--rs-surface-muted);
+  border: 1px solid var(--rs-line);
+  border-radius: var(--rs-radius-md);
+  overflow-x: auto;
+  line-height: 1.6;
+}
+
+.rs-markdown pre.rs-code code {
+  padding: 0;
+  background: none;
+  color: var(--rs-ink-800);
+  font-size: var(--rs-text-sm);
+}
+
+.rs-table-scroll {
+  margin: var(--rs-space-4) 0;
+  overflow-x: auto;
+  border: 1px solid var(--rs-line);
+  border-radius: var(--rs-radius-md);
+}
+
+.rs-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--rs-text-sm);
+}
+
+.rs-markdown th,
+.rs-markdown td {
+  padding: var(--rs-space-2) var(--rs-space-3);
+  border-bottom: 1px solid var(--rs-line);
+  text-align: left;
+}
+
+.rs-markdown th {
+  background: var(--rs-surface-muted);
+  color: var(--rs-ink-700);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rs-markdown tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.rs-markdown hr {
+  margin: var(--rs-space-6) 0;
+  border: none;
+  border-top: 1px solid var(--rs-line);
+}
+
+.rs-markdown img {
+  max-width: 100%;
+  border-radius: var(--rs-radius-sm);
+}
+
+/* 被拦掉的不安全链接：视觉上退化为普通文本，避免误导点击 */
+.rs-markdown a[data-rs-blocked-link] {
+  color: var(--rs-ink-500);
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
