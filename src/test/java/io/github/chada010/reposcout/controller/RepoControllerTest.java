@@ -19,6 +19,7 @@ import io.github.chada010.reposcout.exception.RepoNotFoundException;
 import io.github.chada010.reposcout.rag.IndexResult;
 import io.github.chada010.reposcout.rag.IndexingService;
 import io.github.chada010.reposcout.service.RepoService;
+import io.github.chada010.reposcout.service.ReportService;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
@@ -41,6 +42,9 @@ class RepoControllerTest {
 
     @MockitoBean
     private IndexingService indexingService;
+
+    @MockitoBean
+    private ReportService reportService;
 
     private Repo repo(long id, String owner, String name) {
         Repo repo = new Repo(owner, name, "master", "My first repo",
@@ -209,5 +213,39 @@ class RepoControllerTest {
         mockMvc.perform(post("/api/repos/1/index"))
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.code").value("GITHUB_UNAVAILABLE"));
+    }
+
+    @Test
+    void reportSuccessReturnsRepoIdGeneratedAtCostMsAndReport() throws Exception {
+        given(reportService.generate(1L)).willReturn(new ReportService.ReportResult(
+                "## 项目定位\n导读 Agent。\n## 技术栈\nSpring Boot。\n## 目录结构解读\n标准布局。\n"
+                        + "## 上手指引\n见 README。\n## 近期动向\n开发中。",
+                LocalDateTime.of(2026, 7, 26, 12, 0, 0), 8000L));
+
+        mockMvc.perform(post("/api/repos/1/report"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.repoId").value(1))
+                .andExpect(jsonPath("$.generatedAt").value("2026-07-26T12:00:00"))
+                .andExpect(jsonPath("$.costMs").value(8000))
+                .andExpect(jsonPath("$.report").value(containsString("## 项目定位")));
+    }
+
+    @Test
+    void reportOnMissingRepoReturns404WithRepoNotFound() throws Exception {
+        given(reportService.generate(999999L))
+                .willThrow(new RepoNotFoundException("仓库未接入或不存在:id=999999"));
+
+        mockMvc.perform(post("/api/repos/999999/report"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("REPO_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value(containsString("仓库未接入或不存在")));
+    }
+
+    @Test
+    void reportWithNonNumericIdReturns400NotInternalError() throws Exception {
+        mockMvc.perform(post("/api/repos/abc/report"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAM"))
+                .andExpect(jsonPath("$.message").value(containsString("id")));
     }
 }

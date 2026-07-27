@@ -17,6 +17,9 @@ public interface DocChunkRepository extends JpaRepository<DocChunk, Long> {
 
     List<DocChunk> findByRepoId(long repoId);
 
+    /** 该仓库是否已建文档索引:检索入口先查此项,未索引直接空返回,不触碰 Embedding 模型。 */
+    boolean existsByRepoId(long repoId);
+
     /**
      * 批量删除某仓库全部块。用 JPQL 批量 DELETE(立即执行)而非派生删除:
      * 幂等重建在同一事务内先删后插,若走「加载实体再逐条删」会把删除排进 Hibernate

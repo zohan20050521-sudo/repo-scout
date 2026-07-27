@@ -6,6 +6,7 @@ import dev.langchain4j.memory.chat.ChatMemoryProvider;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+import dev.langchain4j.rag.RetrievalAugmentor;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.tool.ToolProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -63,12 +64,13 @@ public class LlmConfig {
     @Bean
     public Assistant assistant(ChatModel chatModel, ChatMemoryProvider chatMemoryProvider,
                                ToolProvider repoToolProvider, SessionRepoBinding sessionRepoBinding,
-                               AgentProperties agentProperties) {
+                               AgentProperties agentProperties, RetrievalAugmentor retrievalAugmentor) {
         return AiServices.builder(Assistant.class)
                 .chatModel(chatModel)
                 .chatMemoryProvider(chatMemoryProvider)
                 .toolProvider(repoToolProvider)
                 .systemMessageProvider(systemMessageProvider(sessionRepoBinding))
+                .retrievalAugmentor(retrievalAugmentor)
                 .maxSequentialToolsInvocations(agentProperties.maxToolRounds() + FRAMEWORK_BACKSTOP_MARGIN)
                 .build();
     }

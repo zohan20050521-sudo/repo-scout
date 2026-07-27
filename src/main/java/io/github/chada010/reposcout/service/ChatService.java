@@ -1,9 +1,12 @@
 package io.github.chada010.reposcout.service;
 
+import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
 import dev.langchain4j.model.output.TokenUsage;
+import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.service.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +16,7 @@ import org.springframework.util.StringUtils;
 import io.github.chada010.reposcout.exception.InvalidParamException;
 import io.github.chada010.reposcout.exception.RepoNotFoundException;
 import io.github.chada010.reposcout.memory.SessionRepoBinding;
+import io.github.chada010.reposcout.rag.ChatContentRetriever;
 import io.github.chada010.reposcout.repository.RepoRepository;
 
 /**
@@ -56,7 +60,25 @@ public class ChatService {
                 usage == null ? null : usage.outputTokenCount(),
                 usage == null ? null : usage.totalTokenCount(),
                 costMs);
-        return new ChatResult(effectiveSessionId, result.content());
+        return new ChatResult(effectiveSessionId, result.content(), extractSources(result));
+    }
+
+    /**
+     * 从 {@code Result.sources()} 提取本轮实际注入的检索来源文件路径(FR-3.2):
+     * 去重、保持检索得分降序的首次出现顺序;null/空/无 metadata 一律得空列表,永不为 null。
+     */
+    private static List<String> extractSources(Result<String> result) {
+        List<Content> sources = result.sources();
+        if (sources == null || sources.isEmpty()) {
+            return List.of();
+        }
+        return sources.stream()
+                .map(content -> content.textSegment() == null
+                        ? null
+                        : content.textSegment().metadata().getString(ChatContentRetriever.FILE_PATH_KEY))
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
     }
 
     /**
@@ -92,7 +114,7 @@ public class ChatService {
         }
     }
 
-    /** 对话结果:会话 ID(可能为服务端新生成)与模型回答。 */
-    public record ChatResult(String sessionId, String answer) {
+    /** 对话结果:会话 ID(可能为服务端新生成)、模型回答与本轮注入的检索来源文件路径。 */
+    public record ChatResult(String sessionId, String answer, List<String> sources) {
     }
 }

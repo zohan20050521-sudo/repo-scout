@@ -43,7 +43,7 @@ class DocumentFetcherTest {
     }
 
     private static RagProperties props(int maxFiles, int maxFileBytes) {
-        return new RagProperties(maxFiles, maxFileBytes, 400, 80);
+        return new RagProperties(maxFiles, maxFileBytes, 400, 80, 4, 0.5);
     }
 
     private DocumentFetcher fetcher(RagProperties props) {

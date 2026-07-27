@@ -39,7 +39,7 @@ public class ChatController {
         validate(request);
         ChatService.ChatResult result = chatService.chat(
                 request.sessionId(), request.message(), request.repoId());
-        return new ChatResponse(result.sessionId(), result.answer());
+        return new ChatResponse(result.sessionId(), result.answer(), result.sources());
     }
 
     private void validate(ChatRequest request) {

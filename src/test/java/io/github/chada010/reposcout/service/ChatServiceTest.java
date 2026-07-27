@@ -1,9 +1,13 @@
 package io.github.chada010.reposcout.service;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import dev.langchain4j.data.document.Metadata;
+import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.output.TokenUsage;
+import dev.langchain4j.rag.content.Content;
 import dev.langchain4j.service.Result;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,6 +51,10 @@ class ChatServiceTest {
                 .content(answer)
                 .tokenUsage(new TokenUsage(10, 5))
                 .build();
+    }
+
+    private static Content sourceContent(String filePath) {
+        return Content.from(TextSegment.from("块内容", Metadata.from("file_path", filePath)));
     }
 
     @Test
@@ -140,6 +148,46 @@ class ChatServiceTest {
         verify(sessionRepoBinding, never()).bind(anyString(), org.mockito.ArgumentMatchers.anyLong());
         verify(repoRepository, never()).existsById(org.mockito.ArgumentMatchers.anyLong());
         verify(sessionRepoBinding).refreshTtl(SESSION_ID);
+    }
+
+    @Test
+    void sourcesAreExtractedDedupedAndKeptInFirstSeenOrder() {
+        given(assistant.chat(eq(SESSION_ID), anyString())).willReturn(Result.<String>builder()
+                .content("回答")
+                .tokenUsage(new TokenUsage(10, 5))
+                .sources(List.of(
+                        sourceContent("docs/api.md"),
+                        sourceContent("README.md"),
+                        sourceContent("docs/api.md")))
+                .build());
+
+        ChatService.ChatResult result = service().chat(SESSION_ID, "错误码有哪些", null);
+
+        // 去重且保持检索得分降序的首次出现顺序
+        assertThat(result.sources()).containsExactly("docs/api.md", "README.md");
+    }
+
+    @Test
+    void nullSourcesYieldEmptyListNeverNull() {
+        given(assistant.chat(eq(SESSION_ID), anyString()))
+                .willReturn(new Result<>("回答", new TokenUsage(10, 5), null, null, null));
+
+        ChatService.ChatResult result = service().chat(SESSION_ID, "你好", null);
+
+        assertThat(result.sources()).isNotNull().isEmpty();
+    }
+
+    @Test
+    void sourceContentWithoutFilePathMetadataIsSkipped() {
+        given(assistant.chat(eq(SESSION_ID), anyString())).willReturn(Result.<String>builder()
+                .content("回答")
+                .tokenUsage(new TokenUsage(10, 5))
+                .sources(List.of(Content.from("无 metadata 的块")))
+                .build());
+
+        ChatService.ChatResult result = service().chat(SESSION_ID, "你好", null);
+
+        assertThat(result.sources()).isEmpty();
     }
 
     @Test

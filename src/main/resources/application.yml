@@ -47,3 +47,5 @@ app:
     max-file-bytes: ${RAG_MAX_FILE_BYTES:100000}
     chunk-size: ${RAG_CHUNK_SIZE:400}
     chunk-overlap: ${RAG_CHUNK_OVERLAP:80}
+    top-k: ${RAG_TOP_K:4}
+    min-score: ${RAG_MIN_SCORE:0.5}
