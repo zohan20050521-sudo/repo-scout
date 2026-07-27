@@ -1,0 +1,83 @@
+/**
+ * 设计令牌：技术感、可信、安静、精致。
+ * 浅色主界面 + 深墨色标题 + 低饱和蓝青强调，暖色仅用于等待/提醒。
+ * 组件里不写颜色/圆角/阴影魔法值，一律引用这里。
+ */
+:root {
+  /* 品牌与强调 */
+  --rs-brand-50: #f1f6fa;
+  --rs-brand-100: #dfebf3;
+  --rs-brand-200: #c3d9e8;
+  --rs-brand-300: #93b9d1;
+  --rs-brand-500: #3d7ea6;
+  --rs-brand-600: #326a8d;
+  --rs-brand-700: #275572;
+  --rs-teal-500: #3f8f8a;
+
+  /* 中性 */
+  --rs-ink-900: #16232e;
+  --rs-ink-800: #21323f;
+  --rs-ink-700: #33475a;
+  --rs-ink-500: #5c7183;
+  --rs-ink-400: #7d8fa0;
+  --rs-ink-300: #a8b6c2;
+  --rs-line: #e2e8ee;
+  --rs-line-strong: #cfd8e1;
+  --rs-surface: #ffffff;
+  --rs-surface-muted: #f7f9fb;
+  --rs-surface-sunken: #eef2f6;
+  --rs-page-bg: #f4f7fa;
+
+  /* 状态 */
+  --rs-success-500: #3f8f6b;
+  --rs-success-50: #eff7f2;
+  --rs-warn-500: #b4762c;
+  --rs-warn-50: #fdf6ec;
+  --rs-danger-500: #b2453f;
+  --rs-danger-50: #fbf0ef;
+  --rs-info-50: #f0f5f9;
+
+  /* 排版 */
+  --rs-font-sans:
+    'Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, -apple-system,
+    sans-serif;
+  --rs-font-mono: 'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+  --rs-text-xs: 12px;
+  --rs-text-sm: 13px;
+  --rs-text-base: 14px;
+  --rs-text-md: 15px;
+  --rs-text-lg: 18px;
+  --rs-text-xl: 22px;
+  --rs-text-2xl: 28px;
+  --rs-leading-tight: 1.35;
+  --rs-leading-normal: 1.65;
+  --rs-leading-relaxed: 1.8;
+
+  /* 间距 */
+  --rs-space-1: 4px;
+  --rs-space-2: 8px;
+  --rs-space-3: 12px;
+  --rs-space-4: 16px;
+  --rs-space-5: 20px;
+  --rs-space-6: 24px;
+  --rs-space-8: 32px;
+  --rs-space-10: 40px;
+  --rs-space-12: 48px;
+
+  /* 圆角与阴影 */
+  --rs-radius-sm: 6px;
+  --rs-radius-md: 10px;
+  --rs-radius-lg: 14px;
+  --rs-radius-pill: 999px;
+  --rs-shadow-xs: 0 1px 2px rgb(22 35 46 / 6%);
+  --rs-shadow-sm: 0 2px 8px rgb(22 35 46 / 6%);
+  --rs-shadow-md: 0 8px 24px rgb(22 35 46 / 8%);
+
+  /* 动效与层级 */
+  --rs-ease: cubic-bezier(0.16, 0.84, 0.44, 1);
+  --rs-duration-fast: 140ms;
+  --rs-duration-base: 220ms;
+  --rs-focus-ring: 0 0 0 3px var(--rs-brand-200);
+  --rs-layout-max: 1240px;
+  --rs-header-height: 60px;
+}

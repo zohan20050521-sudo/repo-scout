@@ -23,13 +23,27 @@
 | 向量化(Embedding) | LangChain4j 进程内 ONNX 模型 `bge-small-zh` |
 | 业务数据 | MySQL |
 | 会话记忆 | Redis |
+| 向量化(Embedding) | LangChain4j 进程内 ONNX 模型 `bge-small-zh` |
+| 业务数据 | MySQL |
+| 会话记忆 | Redis |
 | 效果评估 | Python 批量评测脚本 |
-
-一期仅提供 REST API,不做前端。
+| 前端框架 | Vue 3 + TypeScript + Vite |
+| 前端 UI | Element Plus |
 
 ## 本地运行
 
-### 环境要求
+### 前端本地开发
+
+```bash
+cd web
+npm ci
+cp .env.example .env.local   # 默认代理 http://localhost:8080，后端需先启动
+npm run dev                   # Vite dev server on http://localhost:5173
+```
+
+详细说明见 [web/README.md](web/README.md)。
+
+### 后端环境要求
 
 - JDK 17
 - Maven 3.9+(或直接使用项目自带的 `./mvnw`)
@@ -216,14 +230,15 @@ DEEPSEEK_API_KEY=x docker compose down -v   # 额外删除数据卷:MySQL 业务
 
 ## 项目状态
 
-🚧 **开发中(v0.1)**
+✅ **v0.3.5 后端已完成，v0.4 Vue 产品前端已完成**
 
 | 版本 | 内容 | 状态 |
 | --- | --- | --- |
-| v0.1 | 项目骨架、DeepSeek 接入、基础对话 + 会话记忆 | 进行中 |
-| v0.2 | GitHub 工具集(目录树/README/issues/commits),Agent 自主规划调用 | 规划中 |
-| v0.3 | 文档向量化 + RAG 问答、仓库分析报告 | 规划中 |
-| v0.4 | 效果评估、Docker 部署、文档收尾 | 规划中 |
+| v0.1 | 项目骨架、DeepSeek 接入、基础对话 + 会话记忆 | ✅ 已完成 |
+| v0.2 | GitHub 工具集(目录树/README/issues/commits),Agent 自主规划调用 | ✅ 已完成 |
+| v0.3 | 文档向量化 + RAG 问答、仓库分析报告 | ✅ 已完成 |
+| v0.3.5 | 公网门禁、统一接口契约 | ✅ 已完成 |
+| v0.4 | Vue 3 产品前端(接入→索引→问答→报告完整闭环) | ✅ 已完成 |
 
 详细需求见 [docs/requirements.md](docs/requirements.md),API 契约见 [docs/api.md](docs/api.md)。
 
