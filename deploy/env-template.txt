@@ -1,0 +1,49 @@
+# /opt/repo-scout/.env —— 生产环境变量模板
+# 用法：cp deploy/env-template.txt /opt/repo-scout/.env，按注释填写后保存。
+# 安全约束：
+#   - 此文件本身不含任何真实密钥（值留 <REPLACE_ME>）；
+#   - .env 不得提交到 git；
+#   - 生成随机密钥：openssl rand -hex 32
+
+# ── 必填 ──────────────────────────────────────────────────────────────────────
+
+# DeepSeek API Key（从 https://platform.deepseek.com 获取）
+DEEPSEEK_API_KEY=<REPLACE_ME>
+
+# 内部 API 门禁共享密钥（与 Vercel REPO_SCOUT_INTERNAL_KEY 保持完全一致）
+# 生成：openssl rand -hex 32
+INTERNAL_API_KEY=<REPLACE_ME>
+
+# MySQL root 密码（compose 内部使用，不对外暴露）
+MYSQL_ROOT_PASSWORD=<REPLACE_ME>
+
+# ── 选填：DeepSeek ────────────────────────────────────────────────────────────
+
+# DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+# DEEPSEEK_MODEL=deepseek-v4-flash
+# DEEPSEEK_TIMEOUT=60s
+
+# ── 选填：对话与 Agent ────────────────────────────────────────────────────────
+
+# CHAT_MESSAGE_MAX_LENGTH=4000
+# CHAT_MEMORY_MAX_MESSAGES=20
+# CHAT_MEMORY_TTL=24h
+# AGENT_MAX_TOOL_ROUNDS=5
+
+# ── 选填：RAG ─────────────────────────────────────────────────────────────────
+
+# RAG_MAX_FILES=30
+# RAG_MAX_FILE_BYTES=100000
+# RAG_CHUNK_SIZE=400
+# RAG_CHUNK_OVERLAP=80
+# RAG_TOP_K=4
+# RAG_MIN_SCORE=0.5
+
+# ── 选填：GitHub API ──────────────────────────────────────────────────────────
+
+# GITHUB_TOKEN=            # 留空为匿名（限流阈值低），建议填写以提升限流阈值
+# GITHUB_TIMEOUT=10s
+
+# ── 提示：以下变量已在 compose.yaml 中硬编码为容器内部地址，生产 compose 启动时无需覆盖 ──
+# MYSQL_HOST=mysql         （已硬编码）
+# REDIS_HOST=redis         （已硬编码）

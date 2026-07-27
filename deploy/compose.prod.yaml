@@ -1,0 +1,23 @@
+# compose.prod.yaml —— 生产覆盖（与 compose.yaml 合并使用）
+# 启动命令：
+#   docker compose -f compose.yaml -f compose.prod.yaml --env-file .env up -d --build
+#
+# 与 compose.yaml 的差异：
+#   1. app 仅绑定 127.0.0.1:18080，不暴露到公网；
+#   2. 注入 INTERNAL_API_KEY（fail-fast，未设置则拒绝启动）；
+#   3. 三个服务均改为 restart: always（本地开发用 unless-stopped 无妨，生产要开机自启）。
+
+services:
+  app:
+    ports:
+      - "127.0.0.1:18080:8080"
+    environment:
+      # 生产必填：内部 API 门禁密钥，与 Vercel REPO_SCOUT_INTERNAL_KEY 保持一致
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?请在 .env 中设置 INTERNAL_API_KEY}
+    restart: always
+
+  mysql:
+    restart: always
+
+  redis:
+    restart: always
