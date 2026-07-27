@@ -11,9 +11,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.github.chada010.reposcout.controller.dto.IndexResponse;
+import io.github.chada010.reposcout.controller.dto.IndexStatusResponse;
 import io.github.chada010.reposcout.controller.dto.RepoOnboardRequest;
 import io.github.chada010.reposcout.controller.dto.RepoResponse;
 import io.github.chada010.reposcout.controller.dto.ReportResponse;
+import io.github.chada010.reposcout.rag.IndexStatusService;
 import io.github.chada010.reposcout.rag.IndexingService;
 import io.github.chada010.reposcout.service.RepoService;
 import io.github.chada010.reposcout.service.ReportService;
@@ -28,12 +30,14 @@ public class RepoController {
 
     private final RepoService repoService;
     private final IndexingService indexingService;
+    private final IndexStatusService indexStatusService;
     private final ReportService reportService;
 
     public RepoController(RepoService repoService, IndexingService indexingService,
-                          ReportService reportService) {
+                          IndexStatusService indexStatusService, ReportService reportService) {
         this.repoService = repoService;
         this.indexingService = indexingService;
+        this.indexStatusService = indexStatusService;
         this.reportService = reportService;
     }
 
@@ -52,6 +56,13 @@ public class RepoController {
     @GetMapping("/repos/{id}")
     public RepoResponse get(@PathVariable long id) {
         return RepoResponse.from(repoService.getRepo(id));
+    }
+
+    @GetMapping("/repos/{id}/index-status")
+    public IndexStatusResponse indexStatus(@PathVariable long id) {
+        IndexStatusService.IndexStatus status = indexStatusService.getStatus(id);
+        return new IndexStatusResponse(status.repoId(), status.indexed(), status.fileCount(),
+                status.chunkCount(), status.indexedAt());
     }
 
     /**

@@ -44,6 +44,7 @@
 | 变量 | 说明 | 默认值 |
 | --- | --- | --- |
 | `DEEPSEEK_API_KEY` | **必填**,DeepSeek API Key | 无 |
+| `INTERNAL_API_KEY` | 内部 API 共享密钥;空或全空白时门禁关闭 | 空 |
 | `DEEPSEEK_BASE_URL` | DeepSeek OpenAI 兼容端点 | `https://api.deepseek.com/v1` |
 | `DEEPSEEK_MODEL` | 对话模型名(可选 `deepseek-v4-pro`) | `deepseek-v4-flash` |
 | `DEEPSEEK_TIMEOUT` | 模型调用超时 | `60s` |
@@ -127,14 +128,27 @@ curl -s -X POST http://localhost:8080/api/repos/1/index
 ```
 
 拉取范围(README + `docs/` + 扩展名白名单)与上限、切分粒度见上方 `RAG_*` 环境变量;
-接口契约与错误表详见 [docs/api.md](docs/api.md)。
+接口契约与错误表详见 [docs/api.md](docs/api.md)。精致前端可调用
+`GET /api/repos/{id}/index-status` 判断是否已索引并展示文件数、块数和索引时间,无需拉取块内容。
+
+### 公网演示内部访问门禁(v0.3.5)
+
+设置非空 `INTERNAL_API_KEY` 后,除精确 `GET /api/health` 与 OPTIONS 预检外,
+`/api/**` 都要求 `X-Repo-Scout-Internal-Key`。该 key 只允许放在 Vercel Serverless 与
+VPS 环境变量中,由同源服务端代理注入;**不得放入浏览器、Vite 环境变量或前端 bundle**。
+目标链路是浏览器 → Vercel 同源 `/api` → 后端,本版本不新增 CORS。
+
+这只是阻止访客绕过代理直接访问后端的共享密钥门禁,不是用户鉴权,也不能阻止访客通过
+公开代理滥用 API。正式公网开放前仍必须在 Cloudflare/Nginx/Vercel 层配置限流与高成本
+端点配额;本版本不实现这些部署层能力。
 
 ### RAG 问答与仓库导读报告(v0.3)
 
 **建议先对仓库执行上面的 `POST /api/repos/{id}/index` 再问答/生成报告,以获得最佳效果。**
 
-绑定已索引仓库的会话中,服务端会按问题自动检索文档块注入上下文,回答附引用来源
-(`sources` 为本轮注入的来源文件路径;未索引/无命中时自动退化为纯工具问答,`sources` 为 `[]`):
+绑定已索引仓库的会话中,服务端会按问题自动检索文档块注入上下文,回答同时返回
+`sources`(兼容的来源路径数组)与 `citations`(含 chunk 序号、完整摘录、原始分数和 GitHub
+跳转 URL 的结构化引用,供前端引用卡片使用);未索引/无命中时自动退化为纯工具问答,两者均为 `[]`:
 
 ```bash
 # RAG 问答:回答基于文档摘录并注明出处

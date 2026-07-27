@@ -20,6 +20,8 @@ server:
   port: 8080
 
 app:
+  security:
+    internal-api-key: ${INTERNAL_API_KEY:}
   deepseek:
     api-key: ${DEEPSEEK_API_KEY:}
     base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com/v1}

@@ -17,6 +17,7 @@ import io.github.chada010.reposcout.exception.GithubUnavailableException;
 import io.github.chada010.reposcout.exception.InvalidParamException;
 import io.github.chada010.reposcout.exception.RepoNotFoundException;
 import io.github.chada010.reposcout.rag.IndexResult;
+import io.github.chada010.reposcout.rag.IndexStatusService;
 import io.github.chada010.reposcout.rag.IndexingService;
 import io.github.chada010.reposcout.service.RepoService;
 import io.github.chada010.reposcout.service.ReportService;
@@ -42,6 +43,9 @@ class RepoControllerTest {
 
     @MockitoBean
     private IndexingService indexingService;
+
+    @MockitoBean
+    private IndexStatusService indexStatusService;
 
     @MockitoBean
     private ReportService reportService;
@@ -180,6 +184,37 @@ class RepoControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_PARAM"))
                 .andExpect(jsonPath("$.message").value(containsString("id")));
+    }
+
+    @Test
+    void indexStatusSuccessReturnsResourceJson() throws Exception {
+        given(indexStatusService.getStatus(1L)).willReturn(new IndexStatusService.IndexStatus(
+                1L, true, 4, 63, LocalDateTime.of(2026, 7, 27, 12, 0)));
+
+        mockMvc.perform(get("/api/repos/1/index-status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.repoId").value(1))
+                .andExpect(jsonPath("$.indexed").value(true))
+                .andExpect(jsonPath("$.fileCount").value(4))
+                .andExpect(jsonPath("$.chunkCount").value(63))
+                .andExpect(jsonPath("$.indexedAt").value("2026-07-27T12:00:00"));
+    }
+
+    @Test
+    void indexStatusOnMissingRepoReturns404() throws Exception {
+        given(indexStatusService.getStatus(9L))
+                .willThrow(new RepoNotFoundException("仓库未接入或不存在:id=9"));
+
+        mockMvc.perform(get("/api/repos/9/index-status"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("REPO_NOT_FOUND"));
+    }
+
+    @Test
+    void indexStatusWithNonNumericIdReturns400() throws Exception {
+        mockMvc.perform(get("/api/repos/abc/index-status"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAM"));
     }
 
     @Test

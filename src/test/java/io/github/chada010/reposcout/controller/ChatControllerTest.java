@@ -83,7 +83,7 @@ class ChatControllerTest {
     @Test
     void validRequestReturns200WithSessionIdAndAnswer() throws Exception {
         given(chatService.chat(isNull(), anyString(), isNull()))
-                .willReturn(new ChatService.ChatResult(SESSION_ID, "你好,我是 repo-scout。", List.of()));
+                .willReturn(new ChatService.ChatResult(SESSION_ID, "你好,我是 repo-scout。", List.of(), List.of()));
 
         mockMvc.perform(post("/api/chat")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -97,7 +97,9 @@ class ChatControllerTest {
     void responseContainsSourcesArray() throws Exception {
         given(chatService.chat(isNull(), anyString(), isNull()))
                 .willReturn(new ChatService.ChatResult(SESSION_ID, "错误码有五个……",
-                        List.of("docs/api.md", "README.md")));
+                        List.of("docs/api.md", "README.md"), List.of(
+                                new ChatService.Citation("docs/api.md", 3, "统一错误响应结构", 0.806,
+                                        "https://github.com/o/r/blob/main/docs/api.md"))));
 
         mockMvc.perform(post("/api/chat")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -105,26 +107,34 @@ class ChatControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sources.length()").value(2))
                 .andExpect(jsonPath("$.sources[0]").value("docs/api.md"))
-                .andExpect(jsonPath("$.sources[1]").value("README.md"));
+                .andExpect(jsonPath("$.sources[1]").value("README.md"))
+                .andExpect(jsonPath("$.citations[0].filePath").value("docs/api.md"))
+                .andExpect(jsonPath("$.citations[0].chunkIndex").value(3))
+                .andExpect(jsonPath("$.citations[0].excerpt").value("统一错误响应结构"))
+                .andExpect(jsonPath("$.citations[0].score").value(0.806))
+                .andExpect(jsonPath("$.citations[0].url")
+                        .value("https://github.com/o/r/blob/main/docs/api.md"));
     }
 
     @Test
     void emptySourcesSerializeAsEmptyArray() throws Exception {
         given(chatService.chat(isNull(), anyString(), isNull()))
-                .willReturn(new ChatService.ChatResult(SESSION_ID, "你好", List.of()));
+                .willReturn(new ChatService.ChatResult(SESSION_ID, "你好", List.of(), List.of()));
 
         mockMvc.perform(post("/api/chat")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"message\": \"你好\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sources").isArray())
-                .andExpect(jsonPath("$.sources").isEmpty());
+                .andExpect(jsonPath("$.sources").isEmpty())
+                .andExpect(jsonPath("$.citations").isArray())
+                .andExpect(jsonPath("$.citations").isEmpty());
     }
 
     @Test
     void repoIdIsPassedThroughToService() throws Exception {
         given(chatService.chat(eq(SESSION_ID), anyString(), eq(7L)))
-                .willReturn(new ChatService.ChatResult(SESSION_ID, "已绑定回答", List.of("docs/api.md")));
+                .willReturn(new ChatService.ChatResult(SESSION_ID, "已绑定回答", List.of("docs/api.md"), List.of()));
 
         mockMvc.perform(post("/api/chat")
                         .contentType(MediaType.APPLICATION_JSON)
