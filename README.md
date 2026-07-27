@@ -265,6 +265,46 @@ DEEPSEEK_API_KEY=x docker compose down -v   # 额外删除数据卷:MySQL 业务
 
 详细需求见 [docs/requirements.md](docs/requirements.md),API 契约见 [docs/api.md](docs/api.md)。
 
+## 公网部署
+
+完整部署架构：
+
+```
+浏览器 → Cloudflare → Vercel（repo-scout.chada010.me）
+         → Serverless proxy（注入 INTERNAL_API_KEY）
+              → Cloudflare → dedirock-01（api.repo-scout.chada010.me）
+                   → Nginx（:443） → Spring Boot（127.0.0.1:18080）
+```
+
+### 部署组件
+
+| 组件 | 位置 | 说明 |
+|------|------|------|
+| 后端 | dedirock-01（`192.236.226.3`） | Docker Compose + Nginx + Certbot |
+| 前端 | Vercel | Vue 3 静态站 + Serverless 代理 |
+| CDN / 安全 | Cloudflare | 橙云代理 + Rate Limiting |
+
+### 安全边界
+
+- `INTERNAL_API_KEY`（VPS `.env`）与 `REPO_SCOUT_INTERNAL_KEY`（Vercel 服务端）保持完全一致；
+- Vercel Serverless 代理负责注入密钥，**浏览器和前端 bundle 永不持有**；
+- VPS 后端 `INTERNAL_API_KEY` 非空时，除 `GET /api/health` 外所有 `/api/**` 均需携带密钥；
+- 密钥只能由 `openssl rand -hex 32` 在本地生成，**不得写入任何代码或配置文件提交到 git**。
+
+### 快速参考
+
+| 文件 | 用途 |
+|------|------|
+| `deploy/nginx-api.conf` | 拷贝到 `/etc/nginx/conf.d/`，提供 HTTPS 反向代理 |
+| `deploy/compose.prod.yaml` | 生产 Compose 覆盖（绑定 `127.0.0.1:18080`，注入密钥）|
+| `deploy/env-template.txt` | 生成 `/opt/repo-scout/.env` 的模板 |
+| `deploy/vps-deploy-sop.md` | VPS 完整操作步骤（DNS → Nginx → Certbot → Docker → 验收）|
+| `deploy/vercel-deploy-sop.md` | Vercel 项目创建、环境变量配置、域名绑定步骤 |
+| `deploy/cloudflare-rate-limiting.md` | Cloudflare WAF 限流规则手动配置说明 |
+| `web/api/[...path].ts` | Vercel Serverless 同源代理函数 |
+
+详细步骤见各 SOP 文档。
+
 ## License
 
 [MIT](LICENSE)

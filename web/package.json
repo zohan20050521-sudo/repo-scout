@@ -46,6 +46,7 @@
     "vite": "7.3.6",
     "vitest": "4.1.10",
     "vue-eslint-parser": "10.3.0",
-    "vue-tsc": "3.3.8"
+    "vue-tsc": "3.3.8",
+    "@vercel/node": "3.2.27"
   }
 }
