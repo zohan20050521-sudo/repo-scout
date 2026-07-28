@@ -1,5 +1,5 @@
 /**
- * 与 docs/api.md（v0.3.5）一一对应的接口类型。
+ * 与 docs/api.md（v0.6.0）一一对应的接口类型。
  * 成功响应直接是资源 JSON，不存在 { code, data, msg } 包装。
  */
 
@@ -31,15 +31,35 @@ export interface IndexStatus {
   chunkCount: number
   /** 未索引为 null */
   indexedAt: string | null
+  /** 当前或最近一次索引任务；从未提交或状态过期时为 null */
+  task?: IndexTask | null
 }
 
-/** POST /api/repos/{id}/index */
-export interface IndexResult {
+export type IndexJobStatus = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
+
+/** GET /api/repos/{id}/index-status 中的任务对象 */
+export interface IndexTask {
+  jobId: string
   repoId: number
-  fileCount: number
-  chunkCount: number
-  costMs: number
+  status: IndexJobStatus
+  errorCode: ApiErrorCode | null
+  errorMessage: string | null
+  fileCount: number | null
+  chunkCount: number | null
+  costMs: number | null
+  startedAt: string | null
+  finishedAt: string | null
 }
+
+/** POST /api/repos/{id}/index：短请求只返回任务资源 */
+export interface IndexJobResponse {
+  repoId: number
+  jobId: string
+  status: IndexJobStatus
+}
+
+/** 旧调用方名称保留为类型别名，字段已切换为异步任务响应。 */
+export type IndexResult = IndexJobResponse
 
 /** POST /api/chat 请求体 */
 export interface ChatRequest {

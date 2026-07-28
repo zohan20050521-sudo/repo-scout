@@ -3,6 +3,8 @@ package io.github.chada010.reposcout.controller;
 import java.util.List;
 
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -12,11 +14,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import io.github.chada010.reposcout.controller.dto.IndexResponse;
 import io.github.chada010.reposcout.controller.dto.IndexStatusResponse;
+import io.github.chada010.reposcout.controller.dto.IndexTaskResponse;
 import io.github.chada010.reposcout.controller.dto.RepoOnboardRequest;
 import io.github.chada010.reposcout.controller.dto.RepoResponse;
 import io.github.chada010.reposcout.controller.dto.ReportResponse;
+import io.github.chada010.reposcout.rag.IndexJobService;
 import io.github.chada010.reposcout.rag.IndexStatusService;
-import io.github.chada010.reposcout.rag.IndexingService;
 import io.github.chada010.reposcout.service.RepoService;
 import io.github.chada010.reposcout.service.ReportService;
 
@@ -29,14 +32,14 @@ import io.github.chada010.reposcout.service.ReportService;
 public class RepoController {
 
     private final RepoService repoService;
-    private final IndexingService indexingService;
+    private final IndexJobService indexJobService;
     private final IndexStatusService indexStatusService;
     private final ReportService reportService;
 
-    public RepoController(RepoService repoService, IndexingService indexingService,
+    public RepoController(RepoService repoService, IndexJobService indexJobService,
                           IndexStatusService indexStatusService, ReportService reportService) {
         this.repoService = repoService;
-        this.indexingService = indexingService;
+        this.indexJobService = indexJobService;
         this.indexStatusService = indexStatusService;
         this.reportService = reportService;
     }
@@ -62,16 +65,18 @@ public class RepoController {
     public IndexStatusResponse indexStatus(@PathVariable long id) {
         IndexStatusService.IndexStatus status = indexStatusService.getStatus(id);
         return new IndexStatusResponse(status.repoId(), status.indexed(), status.fileCount(),
-                status.chunkCount(), status.indexedAt());
+                status.chunkCount(), status.indexedAt(),
+                status.task() == null ? null : IndexTaskResponse.from(status.task()));
     }
 
     /**
-     * 触发向量化索引(FR-3.1):拉取该仓库文档、切分、进程内向量化并入库,重建幂等。
-     * 仓库未接入 → 404 REPO_NOT_FOUND(IndexingService 校验);GitHub 不可用/限流 → 502。
+     * 建立异步向量化索引任务(FR-3.1)。请求只做仓库校验与任务去重，立即返回 202；
+     * 实际拉取、切分、向量化与入库由后台单线程 worker 执行。
      */
     @PostMapping("/repos/{id}/index")
-    public IndexResponse index(@PathVariable long id) {
-        return IndexResponse.of(id, indexingService.index(id));
+    public ResponseEntity<IndexResponse> index(@PathVariable long id) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(IndexResponse.of(indexJobService.submit(id)));
     }
 
     /**

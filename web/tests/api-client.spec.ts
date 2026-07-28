@@ -23,6 +23,7 @@ describe('API 请求层', () => {
 
   it('baseURL 固定为同源 /api，且不带任何内部密钥请求头', () => {
     expect(http.defaults.baseURL).toBe('/api')
+    expect(http.defaults.timeout).toBe(30_000)
     const headers = JSON.stringify(http.defaults.headers)
     expect(headers.toLowerCase()).not.toContain('internal')
   })

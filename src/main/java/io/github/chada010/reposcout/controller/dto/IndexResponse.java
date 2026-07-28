@@ -1,6 +1,7 @@
 package io.github.chada010.reposcout.controller.dto;
 
-import io.github.chada010.reposcout.rag.IndexResult;
+import io.github.chada010.reposcout.rag.IndexJobState;
+import io.github.chada010.reposcout.rag.IndexJobStatus;
 
 /**
  * 触发向量化索引的响应(FR-3.1):直接返回资源 JSON,无全局包装结构。
@@ -8,12 +9,11 @@ import io.github.chada010.reposcout.rag.IndexResult;
  */
 public record IndexResponse(
         long repoId,
-        int fileCount,
-        int chunkCount,
-        long costMs
+        String jobId,
+        IndexJobStatus status
 ) {
 
-    public static IndexResponse of(long repoId, IndexResult result) {
-        return new IndexResponse(repoId, result.fileCount(), result.chunkCount(), result.costMs());
+    public static IndexResponse of(IndexJobState state) {
+        return new IndexResponse(state.repoId(), state.jobId(), state.status());
     }
 }

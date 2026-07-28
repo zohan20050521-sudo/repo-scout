@@ -1,6 +1,6 @@
 # repo-scout API 文档
 
-- 版本:v0.3.5
+- 版本:v0.6.0
 - Base URL:`http://localhost:8080`
 - 访问门禁:默认关闭;设置非空 `INTERNAL_API_KEY` 后,除精确 `GET /api/health` 外的 `/api/**` 请求须携带 `X-Repo-Scout-Internal-Key`
 
@@ -266,7 +266,8 @@ curl -s -X POST http://localhost:8080/api/repos \
 ## GET /api/repos/{id}/index-status
 
 查询已接入仓库的当前文档索引状态。服务端通过一条聚合查询统计唯一文件数、块数与最近
-`createdAt`,不加载 chunk 内容或 embedding。`indexed = chunkCount > 0`。
+`createdAt`,不加载 chunk 内容或 embedding。`indexed = chunkCount > 0`。若存在索引任务，
+响应附带最近任务快照；任务状态来自 Redis，状态 TTL 至少 24 小时。
 
 ### 已索引响应 `200 OK`
 
@@ -276,7 +277,19 @@ curl -s -X POST http://localhost:8080/api/repos \
   "indexed": true,
   "fileCount": 4,
   "chunkCount": 63,
-  "indexedAt": "2026-07-27T12:00:00"
+  "indexedAt": "2026-07-27T12:00:00",
+  "task": {
+    "jobId": "0f14d0ab-9605-4a62-a9e4-5ed26688389b",
+    "repoId": 1,
+    "status": "SUCCEEDED",
+    "errorCode": null,
+    "errorMessage": null,
+    "fileCount": 4,
+    "chunkCount": 63,
+    "costMs": 2450,
+    "startedAt": "2026-07-27T11:59:00",
+    "finishedAt": "2026-07-27T12:00:00"
+  }
 }
 ```
 
@@ -288,7 +301,8 @@ curl -s -X POST http://localhost:8080/api/repos \
   "indexed": false,
   "fileCount": 0,
   "chunkCount": 0,
-  "indexedAt": null
+  "indexedAt": null,
+  "task": null
 }
 ```
 
@@ -299,6 +313,10 @@ curl -s -X POST http://localhost:8080/api/repos \
 | `fileCount` | number | 唯一 `filePath` 数 |
 | `chunkCount` | number | 文档块总数 |
 | `indexedAt` | string/null | 最近一批块的最大 `createdAt`;未索引为 null |
+| `task` | object/null | 最近索引任务；无任务时为 null。字段含 `jobId`、`repoId`、`status`、`errorCode`、`errorMessage`、`fileCount`、`chunkCount`、`costMs`、`startedAt`、`finishedAt` |
+
+`task.status` 固定为 `QUEUED`、`RUNNING`、`SUCCEEDED` 或 `FAILED`。终态成功包含本次结果计数；
+失败包含安全的 `errorCode/errorMessage`，不会返回堆栈或上游敏感信息。
 
 ### 错误
 
@@ -317,11 +335,14 @@ curl -s http://localhost:8080/api/repos/1/index-status \
 
 ## POST /api/repos/{id}/index
 
-触发对已接入仓库的**文档向量化入库**(FR-3.1):拉取该仓库 README 与 `docs/` 目录下的文本文档
+建立对已接入仓库的**文档向量化入库任务**(FR-3.1):拉取该仓库 README 与 `docs/` 目录下的文本文档
 (扩展名白名单 `.md/.markdown/.txt/.adoc/.rst`),切分、进程内 `bge-small-zh` 向量化后存入 `doc_chunk` 表。
 
-- **同步执行**:请求在索引完成后才返回;耗时受拉取上限(默认最多 30 个文件、单文件 100KB)约束。
+- **异步执行**:请求只校验仓库、建立任务并立即返回 `202 Accepted`;拉取、embedding 与入库在后台
+  单线程 worker 中执行，浏览器通过 `GET /index-status` 轮询任务状态。
 - **幂等重建**:重复调用会先删该仓库旧块再整体重建,`doc_chunk` 总数不因重复调用增长。
+- **请求去重**:同一仓库已有 `QUEUED`/`RUNNING` 任务时返回同一 `jobId`;终态后再次调用才会建立新任务。
+- **资源限制**:索引 worker 核心/最大线程数均为 1，队列有界；队列满时返回结构化 `INTERNAL_ERROR`。
 - 服务端默认匿名调用 GitHub API(限流阈值较低,索引会拉多个文件);设置 `GITHUB_TOKEN` 阈值更高。
 - 拉取范围与上限由服务端配置(`RAG_*`,见 README),不经请求参数。
 
@@ -331,23 +352,21 @@ curl -s http://localhost:8080/api/repos/1/index-status \
 | --- | --- | --- |
 | `id` | number | 已接入仓库的 id(见 `POST /api/repos`) |
 
-### 响应 `200 OK`
+### 响应 `202 Accepted`
 
 ```json
 {
   "repoId": 1,
-  "fileCount": 8,
-  "chunkCount": 63,
-  "costMs": 2450
+  "jobId": "0f14d0ab-9605-4a62-a9e4-5ed26688389b",
+  "status": "QUEUED"
 }
 ```
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `repoId` | number | 被索引的仓库 id |
-| `fileCount` | number | 实际拉取并索引的文档数(README 计入) |
-| `chunkCount` | number | 切分并入库的文档块总数 |
-| `costMs` | number | 本次索引总耗时(毫秒) |
+| `jobId` | string | UUID 任务 id；重复提交运行中任务时复用 |
+| `status` | string | 建立新任务时为 `QUEUED`;重复提交可能返回 `RUNNING` |
 
 ### 错误
 
@@ -355,10 +374,10 @@ curl -s http://localhost:8080/api/repos/1/index-status \
 | --- | --- | --- |
 | `id` 非数字 | 400 | `INVALID_PARAM` |
 | 仓库未接入/不存在(message「仓库未接入或不存在」) | 404 | `REPO_NOT_FOUND` |
-| 拉取目录树时 GitHub 网络错误/超时/5xx | 502 | `GITHUB_UNAVAILABLE` |
-| 拉取目录树时 GitHub 限流(message 明确提示限流) | 502 | `GITHUB_UNAVAILABLE` |
+| Redis 不可用或索引队列已满 | 500 | `INTERNAL_ERROR` |
 
-说明:README 或单个 docs 文件拉取失败会被跳过(不致命),不影响整体成功;只有**目录树整体**拉取失败才返回 502。
+说明:README 或单个 docs 文件拉取失败会被跳过(不致命)。GitHub 拉取/限流或未预期异常会写入
+任务终态 `FAILED`，并在 `GET /index-status` 的 task 中返回安全错误；不会让 POST 长时间等待。
 
 ### 示例
 
@@ -366,7 +385,11 @@ curl -s http://localhost:8080/api/repos/1/index-status \
 # 先接入仓库拿到 id,再触发索引
 curl -s -X POST http://localhost:8080/api/repos/1/index \
   -H 'X-Repo-Scout-Internal-Key: <internal-key>'
-# → {"repoId":1,"fileCount":8,"chunkCount":63,"costMs":2450}
+# → {"repoId":1,"jobId":"<uuid>","status":"QUEUED"}
+
+# 轮询直到 task.status 为 SUCCEEDED 或 FAILED
+curl -s http://localhost:8080/api/repos/1/index-status \
+  -H 'X-Repo-Scout-Internal-Key: <internal-key>'
 
 # 未接入的 id
 curl -s -X POST http://localhost:8080/api/repos/999999/index \
