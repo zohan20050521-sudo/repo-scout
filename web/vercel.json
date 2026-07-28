@@ -1,1 +1,16 @@
-{}
+{
+  "version": 2,
+  "routes": [
+    {
+      "src": "^/api/(.*)$",
+      "dest": "/api/[...path]?...path=$1"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "^/(?!api(?:/|$)).*$",
+      "dest": "/index.html"
+    }
+  ]
+}
