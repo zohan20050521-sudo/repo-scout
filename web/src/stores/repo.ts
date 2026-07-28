@@ -82,6 +82,12 @@ export const useRepoStore = defineStore('repo', () => {
     pollAttempts = 0
   }
 
+  /** 组件卸载时同时使尚未完成的状态请求失效，防止它重新启动轮询。 */
+  function invalidatePolling(): void {
+    stateGeneration += 1
+    stopPolling()
+  }
+
   function taskError(task: IndexTask): ApiError {
     const knownCodes: readonly ApiErrorCode[] = [
       'INVALID_PARAM',
@@ -234,6 +240,7 @@ export const useRepoStore = defineStore('repo', () => {
     runIndex,
     startPolling,
     stopPolling,
+    invalidatePolling,
     upsertRepo,
     resetIndexState,
   }

@@ -29,6 +29,7 @@ public class IndexJobService {
     private static final String RATE_LIMIT_MESSAGE = "GitHub API 限流，请稍后重试";
     private static final String INTERNAL_MESSAGE = "索引任务失败，请稍后重试";
     private static final String QUEUE_FULL_MESSAGE = "索引队列繁忙，请稍后重试";
+    private static final int MAX_SUBMIT_ATTEMPTS = 5;
 
     private final RepoRepository repoRepository;
     private final IndexingService indexingService;
@@ -49,10 +50,11 @@ public class IndexJobService {
         repoRepository.findById(repoId)
                 .orElseThrow(() -> new RepoNotFoundException("仓库未接入或不存在:id=" + repoId));
 
-        for (int attempt = 0; attempt < 3; attempt++) {
-            String jobId = UUID.randomUUID().toString();
-            if (store.tryAcquire(repoId, jobId)) {
-                return enqueue(repoId, jobId);
+        for (int attempt = 0; attempt < MAX_SUBMIT_ATTEMPTS; attempt++) {
+            IndexJobState queued = queued(repoId);
+            IndexJobStore.CreateResult result = store.createIfAvailable(queued);
+            if (result == IndexJobStore.CreateResult.CREATED) {
+                return enqueue(queued);
             }
 
             Optional<IndexJobState> current = store.find(repoId);
@@ -60,34 +62,42 @@ public class IndexJobService {
                 return current.get();
             }
 
-            // 终态任务的锁只可能是上次释放前进程崩溃留下的旧锁；按值释放后重试。
+            // 旧版本可能留下 lock-without-state；只按 owner 原子清理后重试。
             String owner = store.lockOwner(repoId);
-            if (owner == null) {
+            if (owner != null) {
+                if (current.isPresent()) {
+                    store.releaseIfOwner(repoId, owner);
+                } else {
+                    store.releaseOrphanIfOwner(repoId, owner);
+                }
                 continue;
             }
-            if (current.isPresent()) {
-                store.releaseIfOwner(repoId, owner);
-                continue;
+
+            // active marker 与 state 不一致时不返回 500，清理后让下一次原子创建修复。
+            String activeOwner = store.activeOwner(repoId);
+            if (activeOwner != null) {
+                store.releaseIfOwner(repoId, activeOwner);
             }
-            throw new IllegalStateException("索引任务状态不可用");
         }
         throw new IllegalStateException("索引任务提交冲突，请稍后重试");
     }
 
-    private IndexJobState enqueue(long repoId, String jobId) {
-        IndexJobState queued = new IndexJobState(jobId, repoId, IndexJobStatus.QUEUED,
+    private IndexJobState queued(long repoId) {
+        return new IndexJobState(UUID.randomUUID().toString(), repoId, IndexJobStatus.QUEUED,
                 now(), null, null, null, null, null, null, null);
+    }
+
+    private IndexJobState enqueue(IndexJobState queued) {
         try {
-            store.save(queued);
             executor.execute(() -> run(queued));
             return queued;
         } catch (RejectedExecutionException e) {
             markFailedQuietly(queued, INTERNAL_ERROR, QUEUE_FULL_MESSAGE);
-            store.releaseIfOwner(repoId, jobId);
+            store.releaseIfOwner(queued.repoId(), queued.jobId());
             throw e;
         } catch (RuntimeException e) {
             markFailedQuietly(queued, INTERNAL_ERROR, INTERNAL_MESSAGE);
-            store.releaseIfOwner(repoId, jobId);
+            store.releaseIfOwner(queued.repoId(), queued.jobId());
             throw e;
         }
     }
@@ -100,9 +110,11 @@ public class IndexJobService {
                 return;
             }
             IndexJobState running = current.running(now());
-            store.save(running);
+            if (!store.saveIfOwner(running)) {
+                return;
+            }
             IndexResult result = indexingService.index(queued.repoId());
-            store.save(running.succeeded(result, now()));
+            store.saveIfOwner(running.succeeded(result, now()));
         } catch (RepoNotFoundException e) {
             markFailedQuietly(queued, REPO_NOT_FOUND, REPO_NOT_FOUND_MESSAGE);
         } catch (GithubRateLimitException e) {
@@ -126,7 +138,7 @@ public class IndexJobService {
         try {
             IndexJobState current = store.find(job.repoId()).orElse(job);
             if (job.jobId().equals(current.jobId())) {
-                store.save(current.failed(code, message, now()));
+                store.saveIfOwner(current.failed(code, message, now()));
             }
         } catch (RuntimeException e) {
             log.warn("索引任务失败状态写入失败: repoId={}, jobId={}", job.repoId(), job.jobId());

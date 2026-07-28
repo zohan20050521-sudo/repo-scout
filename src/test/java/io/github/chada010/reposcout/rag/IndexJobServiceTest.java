@@ -42,13 +42,14 @@ class IndexJobServiceTest {
     @Test
     void firstSubmitPersistsQueuedStateAndSchedulesExactlyOnce() {
         given(repoRepository.findById(1L)).willReturn(Optional.of(repo()));
-        given(store.tryAcquire(eq(1L), org.mockito.ArgumentMatchers.anyString())).willReturn(true);
+        given(store.createIfAvailable(org.mockito.ArgumentMatchers.any(IndexJobState.class)))
+                .willReturn(IndexJobStore.CreateResult.CREATED);
 
         IndexJobState result = service().submit(1L);
 
         assertThat(result.repoId()).isEqualTo(1L);
         assertThat(result.status()).isEqualTo(IndexJobStatus.QUEUED);
-        verify(store).save(result);
+        verify(store).createIfAvailable(result);
         verify(executor).execute(org.mockito.ArgumentMatchers.any(Runnable.class));
     }
 
@@ -56,7 +57,8 @@ class IndexJobServiceTest {
     void activeTaskIsReusedWithoutSchedulingAnotherEmbedding() {
         IndexJobState running = state(IndexJobStatus.RUNNING);
         given(repoRepository.findById(1L)).willReturn(Optional.of(repo()));
-        given(store.tryAcquire(eq(1L), org.mockito.ArgumentMatchers.anyString())).willReturn(false);
+        given(store.createIfAvailable(org.mockito.ArgumentMatchers.any(IndexJobState.class)))
+                .willReturn(IndexJobStore.CreateResult.ACTIVE);
         given(store.find(1L)).willReturn(Optional.of(running));
 
         assertThat(service().submit(1L)).isEqualTo(running);
@@ -67,8 +69,8 @@ class IndexJobServiceTest {
     void terminalTaskReleasesStaleLockAndCreatesNewJob() {
         IndexJobState succeeded = state(IndexJobStatus.SUCCEEDED);
         given(repoRepository.findById(1L)).willReturn(Optional.of(repo()));
-        given(store.tryAcquire(eq(1L), org.mockito.ArgumentMatchers.anyString()))
-                .willReturn(false, true);
+        given(store.createIfAvailable(org.mockito.ArgumentMatchers.any(IndexJobState.class)))
+                .willReturn(IndexJobStore.CreateResult.LOCKED, IndexJobStore.CreateResult.CREATED);
         given(store.find(1L)).willReturn(Optional.of(succeeded));
         given(store.lockOwner(1L)).willReturn("old-job");
 
@@ -83,12 +85,13 @@ class IndexJobServiceTest {
     void workerSuccessStoresResultAndReleasesOwnLock() {
         IndexJobState queued = state(IndexJobStatus.QUEUED);
         given(store.find(1L)).willReturn(Optional.of(queued));
+        given(store.saveIfOwner(org.mockito.ArgumentMatchers.any(IndexJobState.class))).willReturn(true);
         given(indexingService.index(1L)).willReturn(new IndexResult(3, 12, 456L));
 
         service().run(queued);
 
         ArgumentCaptor<IndexJobState> captured = ArgumentCaptor.forClass(IndexJobState.class);
-        verify(store, org.mockito.Mockito.times(2)).save(captured.capture());
+        verify(store, org.mockito.Mockito.times(2)).saveIfOwner(captured.capture());
         assertThat(captured.getAllValues().get(0).status()).isEqualTo(IndexJobStatus.RUNNING);
         assertThat(captured.getAllValues().get(1).status()).isEqualTo(IndexJobStatus.SUCCEEDED);
         assertThat(captured.getAllValues().get(1).chunkCount()).isEqualTo(12);
@@ -99,12 +102,13 @@ class IndexJobServiceTest {
     void workerGithubFailureStoresSafeErrorAndDoesNotEscapeThread() {
         IndexJobState queued = state(IndexJobStatus.QUEUED);
         given(store.find(1L)).willReturn(Optional.of(queued));
+        given(store.saveIfOwner(org.mockito.ArgumentMatchers.any(IndexJobState.class))).willReturn(true);
         given(indexingService.index(1L)).willThrow(new GithubUnavailableException("secret upstream detail"));
 
         service().run(queued);
 
         ArgumentCaptor<IndexJobState> captured = ArgumentCaptor.forClass(IndexJobState.class);
-        verify(store, org.mockito.Mockito.atLeastOnce()).save(captured.capture());
+        verify(store, org.mockito.Mockito.atLeastOnce()).saveIfOwner(captured.capture());
         IndexJobState failed = captured.getAllValues().get(captured.getAllValues().size() - 1);
         assertThat(failed.status()).isEqualTo(IndexJobStatus.FAILED);
         assertThat(failed.errorCode()).isEqualTo("GITHUB_UNAVAILABLE");
@@ -118,21 +122,75 @@ class IndexJobServiceTest {
 
         assertThatThrownBy(() -> service().submit(9L))
                 .isInstanceOf(RepoNotFoundException.class);
-        verify(store, never()).tryAcquire(org.mockito.ArgumentMatchers.anyLong(),
-                org.mockito.ArgumentMatchers.anyString());
+        verify(store, never()).createIfAvailable(org.mockito.ArgumentMatchers.any(IndexJobState.class));
         verify(executor, never()).execute(org.mockito.ArgumentMatchers.any(Runnable.class));
     }
 
     @Test
     void fullQueueMarksTaskFailedAndPropagatesRejection() {
         given(repoRepository.findById(1L)).willReturn(Optional.of(repo()));
-        given(store.tryAcquire(eq(1L), org.mockito.ArgumentMatchers.anyString())).willReturn(true);
+        given(store.createIfAvailable(org.mockito.ArgumentMatchers.any(IndexJobState.class)))
+                .willReturn(IndexJobStore.CreateResult.CREATED);
         doThrow(new RejectedExecutionException("queue full"))
                 .when(executor).execute(org.mockito.ArgumentMatchers.any(Runnable.class));
 
         assertThatThrownBy(() -> service().submit(1L))
                 .isInstanceOf(RejectedExecutionException.class);
         verify(store).releaseIfOwner(eq(1L), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void orphanLockWithoutStateIsRecoveredAndDoesNotReturnInternalError() {
+        given(repoRepository.findById(1L)).willReturn(Optional.of(repo()));
+        given(store.createIfAvailable(org.mockito.ArgumentMatchers.any(IndexJobState.class)))
+                .willReturn(IndexJobStore.CreateResult.LOCKED, IndexJobStore.CreateResult.CREATED);
+        given(store.find(1L)).willReturn(Optional.empty());
+        given(store.lockOwner(1L)).willReturn("orphan-job");
+
+        IndexJobState result = service().submit(1L);
+
+        assertThat(result.status()).isEqualTo(IndexJobStatus.QUEUED);
+        verify(store).releaseOrphanIfOwner(1L, "orphan-job");
+        verify(executor).execute(org.mockito.ArgumentMatchers.any(Runnable.class));
+    }
+
+    @Test
+    void activeStateIsReusedAfterLockLeaseExpires() {
+        IndexJobState running = state(IndexJobStatus.RUNNING);
+        given(repoRepository.findById(1L)).willReturn(Optional.of(repo()));
+        given(store.createIfAvailable(org.mockito.ArgumentMatchers.any(IndexJobState.class)))
+                .willReturn(IndexJobStore.CreateResult.ACTIVE);
+        given(store.find(1L)).willReturn(Optional.of(running));
+
+        assertThat(service().submit(1L)).isEqualTo(running);
+        verify(executor, never()).execute(org.mockito.ArgumentMatchers.any(Runnable.class));
+    }
+
+    @Test
+    void workerStopsBeforeEmbeddingWhenActiveOwnerWasReplaced() {
+        IndexJobState queued = state(IndexJobStatus.QUEUED);
+        given(store.find(1L)).willReturn(Optional.of(queued));
+        given(store.saveIfOwner(org.mockito.ArgumentMatchers.any(IndexJobState.class))).willReturn(false);
+
+        service().run(queued);
+
+        verify(indexingService, never()).index(1L);
+        verify(store).releaseIfOwner(1L, queued.jobId());
+    }
+
+    @Test
+    void workerDoesNotWriteTerminalStateAfterActiveOwnerWasReplaced() {
+        IndexJobState queued = state(IndexJobStatus.QUEUED);
+        given(store.find(1L)).willReturn(Optional.of(queued));
+        given(store.saveIfOwner(org.mockito.ArgumentMatchers.any(IndexJobState.class)))
+                .willReturn(true, false);
+        given(indexingService.index(1L)).willReturn(new IndexResult(3, 12, 456L));
+
+        service().run(queued);
+
+        verify(store, org.mockito.Mockito.times(2))
+                .saveIfOwner(org.mockito.ArgumentMatchers.any(IndexJobState.class));
+        verify(store).releaseIfOwner(1L, queued.jobId());
     }
 
     private Repo repo() {

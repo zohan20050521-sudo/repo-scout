@@ -23,7 +23,7 @@ function runIndex(): void {
   void repoStore.runIndex(props.repoId)
 }
 
-onBeforeUnmount(() => repoStore.stopPolling())
+onBeforeUnmount(() => repoStore.invalidatePolling())
 </script>
 
 <template>

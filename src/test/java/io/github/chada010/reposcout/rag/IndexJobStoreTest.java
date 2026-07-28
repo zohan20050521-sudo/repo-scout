@@ -31,12 +31,18 @@ class IndexJobStoreTest {
     }
 
     @Test
-    void firstAcquireUsesJobIdAndOneHourTtl() {
-        given(values.setIfAbsent(eq("repo-scout:index:lock:7"), eq("job-7"),
-                eq(IndexJobStore.LOCK_TTL))).willReturn(true);
+    void createUsesOneAtomicScriptForLockStateAndActiveMarker() {
+        given(redisTemplate.execute(any(),
+                eq(List.of("repo-scout:index:lock:7", "repo-scout:index:job:7",
+                        "repo-scout:index:active:7")), any(Object[].class)))
+                .willReturn(1L);
 
-        assertThat(store.tryAcquire(7L, "job-7")).isTrue();
-        verify(values).setIfAbsent("repo-scout:index:lock:7", "job-7", IndexJobStore.LOCK_TTL);
+        assertThat(store.createIfAvailable(state(IndexJobStatus.QUEUED, "job-7")))
+                .isEqualTo(IndexJobStore.CreateResult.CREATED);
+        assertThat(IndexJobStore.ACTIVE_TTL).isEqualTo(IndexJobStore.STATE_TTL);
+        verify(redisTemplate).execute(any(),
+                eq(List.of("repo-scout:index:lock:7", "repo-scout:index:job:7",
+                        "repo-scout:index:active:7")), any(Object[].class));
     }
 
     @Test
@@ -56,11 +62,45 @@ class IndexJobStoreTest {
 
     @Test
     void releaseUsesCompareAndDeleteScriptSoOldJobCannotDeleteNewLock() {
-        given(redisTemplate.execute(any(), eq(List.of("repo-scout:index:lock:3")), eq("old-job")))
+        given(redisTemplate.execute(any(),
+                eq(List.of("repo-scout:index:lock:3", "repo-scout:index:active:3")), eq("old-job")))
                 .willReturn(0L);
 
         assertThat(store.releaseIfOwner(3L, "old-job")).isFalse();
-        verify(redisTemplate).execute(any(), eq(List.of("repo-scout:index:lock:3")), eq("old-job"));
+        verify(redisTemplate).execute(any(),
+                eq(List.of("repo-scout:index:lock:3", "repo-scout:index:active:3")), eq("old-job"));
+    }
+
+    @Test
+    void saveIfOwnerUsesActiveMarkerAsCompareAndSetOwner() {
+        given(redisTemplate.execute(any(),
+                eq(List.of("repo-scout:index:job:7", "repo-scout:index:active:7")),
+                any(Object[].class))).willReturn(1L);
+
+        assertThat(store.saveIfOwner(state(IndexJobStatus.RUNNING, "job-7"))).isTrue();
+        verify(redisTemplate).execute(any(),
+                eq(List.of("repo-scout:index:job:7", "repo-scout:index:active:7")),
+                any(Object[].class));
+    }
+
+    @Test
+    void staleOwnerCannotSaveStateAfterActiveMarkerChanges() {
+        given(redisTemplate.execute(any(),
+                eq(List.of("repo-scout:index:job:7", "repo-scout:index:active:7")),
+                any(Object[].class))).willReturn(0L);
+
+        assertThat(store.saveIfOwner(state(IndexJobStatus.SUCCEEDED, "old-job"))).isFalse();
+    }
+
+    @Test
+    void orphanLockRecoveryComparesOwnerAndRequiresMissingState() {
+        given(redisTemplate.execute(any(), eq(List.of("repo-scout:index:lock:7",
+                "repo-scout:index:job:7", "repo-scout:index:active:7")), eq("old-job")))
+                .willReturn(1L);
+
+        assertThat(store.releaseOrphanIfOwner(7L, "old-job")).isTrue();
+        verify(redisTemplate).execute(any(), eq(List.of("repo-scout:index:lock:7",
+                "repo-scout:index:job:7", "repo-scout:index:active:7")), eq("old-job"));
     }
 
     @Test
@@ -79,5 +119,13 @@ class IndexJobStoreTest {
         assertThatThrownBy(() -> store.find(9L))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("索引任务状态不可用");
+    }
+
+    private IndexJobState state(IndexJobStatus status, String jobId) {
+        return new IndexJobState(jobId, 7L, status,
+                LocalDateTime.of(2026, 7, 28, 12, 0),
+                status == IndexJobStatus.QUEUED ? null : LocalDateTime.of(2026, 7, 28, 12, 1),
+                status == IndexJobStatus.SUCCEEDED ? LocalDateTime.of(2026, 7, 28, 12, 2) : null,
+                null, null, null, null, null);
     }
 }

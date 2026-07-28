@@ -94,6 +94,25 @@ describe('repo store 索引任务轮询', () => {
     expect(store.indexing).toBe(false)
   })
 
+  it('卸载期间完成的状态请求不会重新启动轮询', async () => {
+    let resolveStatus: ((value: IndexStatus) => void) | undefined
+    const getStatus = vi.spyOn(reposApi, 'getIndexStatus').mockReturnValue(
+      new Promise<IndexStatus>((resolve) => {
+        resolveStatus = resolve
+      }),
+    )
+    const store = useRepoStore()
+    const pending = store.fetchIndexStatus(1)
+
+    store.invalidatePolling()
+    resolveStatus?.(status(running))
+    await pending
+    await vi.advanceTimersByTimeAsync(4_000)
+    await flushPromises()
+
+    expect(getStatus).toHaveBeenCalledTimes(1)
+  })
+
   it('轮询超过十分钟后停止并报告超时', async () => {
     vi.spyOn(reposApi, 'getIndexStatus').mockResolvedValue(status(queued))
     const store = useRepoStore()
