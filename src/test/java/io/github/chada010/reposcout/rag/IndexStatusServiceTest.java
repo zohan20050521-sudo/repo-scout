@@ -22,6 +22,8 @@ class IndexStatusServiceTest {
     private RepoRepository repoRepository;
     @Mock
     private DocChunkRepository docChunkRepository;
+    @Mock
+    private IndexJobStore indexJobStore;
 
     private IndexStatusService service() {
         return new IndexStatusService(repoRepository, docChunkRepository);
@@ -31,8 +33,9 @@ class IndexStatusServiceTest {
     void indexedRepoReturnsAggregatedCountsAndLatestTime() {
         LocalDateTime indexedAt = LocalDateTime.of(2026, 7, 27, 12, 0);
         DocChunkRepository.IndexStatistics statistics = statistics(63, 4, indexedAt);
-        given(repoRepository.findById(1L)).willReturn(java.util.Optional.of(org.mockito.Mockito.mock(
-                io.github.chada010.reposcout.entity.Repo.class)));
+        io.github.chada010.reposcout.entity.Repo repo = org.mockito.Mockito.mock(
+                io.github.chada010.reposcout.entity.Repo.class);
+        given(repoRepository.findById(1L)).willReturn(java.util.Optional.of(repo));
         given(docChunkRepository.aggregateIndexStatistics(1L)).willReturn(statistics);
 
         IndexStatusService.IndexStatus result = service().getStatus(1L);
@@ -65,6 +68,24 @@ class IndexStatusServiceTest {
         assertThatThrownBy(() -> service().getStatus(9L))
                 .isInstanceOf(RepoNotFoundException.class)
                 .hasMessage("仓库未接入或不存在:id=9");
+    }
+
+    @Test
+    void indexedStatusIncludesLatestRedisTask() {
+        LocalDateTime queuedAt = LocalDateTime.of(2026, 7, 28, 12, 0);
+        IndexJobState task = new IndexJobState("job-1", 1L, IndexJobStatus.RUNNING,
+                queuedAt, queuedAt, null, null, null, null, null, null);
+        io.github.chada010.reposcout.entity.Repo repo = org.mockito.Mockito.mock(
+                io.github.chada010.reposcout.entity.Repo.class);
+        given(repoRepository.findById(1L)).willReturn(java.util.Optional.of(repo));
+        DocChunkRepository.IndexStatistics emptyStatistics = statistics(0, 0, null);
+        given(docChunkRepository.aggregateIndexStatistics(1L)).willReturn(emptyStatistics);
+        given(indexJobStore.find(1L)).willReturn(java.util.Optional.of(task));
+
+        IndexStatusService.IndexStatus result = new IndexStatusService(
+                repoRepository, docChunkRepository, indexJobStore).getStatus(1L);
+
+        assertThat(result.task()).isEqualTo(task);
     }
 
     private DocChunkRepository.IndexStatistics statistics(long chunks, long files,

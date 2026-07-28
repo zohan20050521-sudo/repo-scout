@@ -9,8 +9,8 @@ import { toApiError } from './error'
 export const http = axios.create({
   baseURL: '/api',
   headers: { 'Content-Type': 'application/json' },
-  // 索引与报告是同步长请求，给足超时：报告参考 30 秒内，索引首次要加载模型
-  timeout: 180_000,
+  // 索引已异步化；普通接口短超时足以覆盖提交任务与状态轮询。
+  timeout: 30_000,
 })
 
 http.interceptors.response.use(

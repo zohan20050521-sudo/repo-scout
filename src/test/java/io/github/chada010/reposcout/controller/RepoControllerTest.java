@@ -16,9 +16,10 @@ import io.github.chada010.reposcout.exception.GithubRateLimitException;
 import io.github.chada010.reposcout.exception.GithubUnavailableException;
 import io.github.chada010.reposcout.exception.InvalidParamException;
 import io.github.chada010.reposcout.exception.RepoNotFoundException;
-import io.github.chada010.reposcout.rag.IndexResult;
+import io.github.chada010.reposcout.rag.IndexJobService;
+import io.github.chada010.reposcout.rag.IndexJobState;
+import io.github.chada010.reposcout.rag.IndexJobStatus;
 import io.github.chada010.reposcout.rag.IndexStatusService;
-import io.github.chada010.reposcout.rag.IndexingService;
 import io.github.chada010.reposcout.service.RepoService;
 import io.github.chada010.reposcout.service.ReportService;
 
@@ -42,7 +43,7 @@ class RepoControllerTest {
     private RepoService repoService;
 
     @MockitoBean
-    private IndexingService indexingService;
+    private IndexJobService indexJobService;
 
     @MockitoBean
     private IndexStatusService indexStatusService;
@@ -189,7 +190,11 @@ class RepoControllerTest {
     @Test
     void indexStatusSuccessReturnsResourceJson() throws Exception {
         given(indexStatusService.getStatus(1L)).willReturn(new IndexStatusService.IndexStatus(
-                1L, true, 4, 63, LocalDateTime.of(2026, 7, 27, 12, 0)));
+                1L, true, 4, 63, LocalDateTime.of(2026, 7, 27, 12, 0),
+                new IndexJobState("job-1", 1L, IndexJobStatus.RUNNING,
+                        LocalDateTime.of(2026, 7, 27, 11, 59),
+                        LocalDateTime.of(2026, 7, 27, 12, 0), null,
+                        null, null, null, null, null)));
 
         mockMvc.perform(get("/api/repos/1/index-status"))
                 .andExpect(status().isOk())
@@ -197,7 +202,9 @@ class RepoControllerTest {
                 .andExpect(jsonPath("$.indexed").value(true))
                 .andExpect(jsonPath("$.fileCount").value(4))
                 .andExpect(jsonPath("$.chunkCount").value(63))
-                .andExpect(jsonPath("$.indexedAt").value("2026-07-27T12:00:00"));
+                .andExpect(jsonPath("$.indexedAt").value("2026-07-27T12:00:00"))
+                .andExpect(jsonPath("$.task.jobId").value("job-1"))
+                .andExpect(jsonPath("$.task.status").value("RUNNING"));
     }
 
     @Test
@@ -211,6 +218,16 @@ class RepoControllerTest {
     }
 
     @Test
+    void indexStatusWithoutTaskKeepsTaskNull() throws Exception {
+        given(indexStatusService.getStatus(2L)).willReturn(new IndexStatusService.IndexStatus(
+                2L, false, 0, 0, null));
+
+        mockMvc.perform(get("/api/repos/2/index-status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.task").isEmpty());
+    }
+
+    @Test
     void indexStatusWithNonNumericIdReturns400() throws Exception {
         mockMvc.perform(get("/api/repos/abc/index-status"))
                 .andExpect(status().isBadRequest())
@@ -218,20 +235,22 @@ class RepoControllerTest {
     }
 
     @Test
-    void indexSuccessReturnsCounts() throws Exception {
-        given(indexingService.index(1L)).willReturn(new IndexResult(3, 12, 456L));
+    void indexReturnsAcceptedJobResource() throws Exception {
+        given(indexJobService.submit(1L)).willReturn(new IndexJobState(
+                "job-1", 1L, IndexJobStatus.QUEUED,
+                LocalDateTime.of(2026, 7, 27, 12, 0), null, null,
+                null, null, null, null, null));
 
         mockMvc.perform(post("/api/repos/1/index"))
-                .andExpect(status().isOk())
+                .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.repoId").value(1))
-                .andExpect(jsonPath("$.fileCount").value(3))
-                .andExpect(jsonPath("$.chunkCount").value(12))
-                .andExpect(jsonPath("$.costMs").value(456));
+                .andExpect(jsonPath("$.jobId").value("job-1"))
+                .andExpect(jsonPath("$.status").value("QUEUED"));
     }
 
     @Test
     void indexOnMissingRepoReturns404WithRepoNotFound() throws Exception {
-        given(indexingService.index(999999L))
+        given(indexJobService.submit(999999L))
                 .willThrow(new RepoNotFoundException("仓库未接入或不存在:id=999999"));
 
         mockMvc.perform(post("/api/repos/999999/index"))
@@ -241,13 +260,14 @@ class RepoControllerTest {
     }
 
     @Test
-    void indexWhenGithubUnavailableReturns502() throws Exception {
-        given(indexingService.index(1L))
-                .willThrow(new GithubUnavailableException("GitHub 服务暂时不可用,请稍后重试"));
+    void indexWhenSchedulingFailsReturnsInternalError() throws Exception {
+        given(indexJobService.submit(1L))
+                .willThrow(new IllegalStateException("内部实现细节"));
 
         mockMvc.perform(post("/api/repos/1/index"))
-                .andExpect(status().isBadGateway())
-                .andExpect(jsonPath("$.code").value("GITHUB_UNAVAILABLE"));
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
+                .andExpect(content().string(not(containsString("内部实现细节"))));
     }
 
     @Test

@@ -8,6 +8,12 @@ public record IndexStatusResponse(
         boolean indexed,
         long fileCount,
         long chunkCount,
-        LocalDateTime indexedAt
+        LocalDateTime indexedAt,
+        IndexTaskResponse task
 ) {
+
+    public IndexStatusResponse(long repoId, boolean indexed, long fileCount,
+                               long chunkCount, LocalDateTime indexedAt) {
+        this(repoId, indexed, fileCount, chunkCount, indexedAt, null);
+    }
 }

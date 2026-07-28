@@ -51,7 +51,7 @@ cp .env.example .env.local
 | 功能 | 说明 |
 | --- | --- |
 | 仓库接入与列表 | `GET /api/repos`、`POST /api/repos`、`GET /api/repos/{id}` |
-| 文档索引 | `GET /api/repos/{id}/index-status`、`POST /api/repos/{id}/index`（同步长请求） |
+| 文档索引 | `GET /api/repos/{id}/index-status`、`POST /api/repos/{id}/index`（异步任务 + 状态轮询） |
 | 多轮问答 | `POST /api/chat`，首轮绑定 repoId，后续复用 sessionId |
 | 结构化 citations | 每轮独立展示 filePath / chunkIndex / score / excerpt，可展开全文、跳转 GitHub |
 | 导读报告 | `POST /api/repos/{id}/report`（同步长请求），五节 Markdown，可复制、下载 |

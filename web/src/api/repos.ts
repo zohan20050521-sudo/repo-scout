@@ -1,5 +1,5 @@
 import { request } from './client'
-import type { CreateRepoRequest, IndexResult, IndexStatus, RepoSummary } from '@/types/api'
+import type { CreateRepoRequest, IndexJobResponse, IndexStatus, RepoSummary } from '@/types/api'
 
 /** GET /api/repos —— 已接入仓库列表，按 id 倒序，一期不分页 */
 export function listRepos(): Promise<RepoSummary[]> {
@@ -22,7 +22,7 @@ export function getIndexStatus(id: number): Promise<IndexStatus> {
   return request<IndexStatus>({ url: `/repos/${id}/index-status`, method: 'GET' })
 }
 
-/** POST /api/repos/{id}/index —— 同步长请求，幂等重建 */
-export function buildIndex(id: number): Promise<IndexResult> {
-  return request<IndexResult>({ url: `/repos/${id}/index`, method: 'POST' })
+/** POST /api/repos/{id}/index —— 建立异步任务，服务端立即返回 202 */
+export function buildIndex(id: number): Promise<IndexJobResponse> {
+  return request<IndexJobResponse>({ url: `/repos/${id}/index`, method: 'POST' })
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount } from 'vue'
 import { DataAnalysis, Loading, Refresh } from '@element-plus/icons-vue'
 import { useRepoStore } from '@/stores/repo'
 import { formatCost, formatDateTime } from '@/composables/useFormat'
@@ -10,21 +10,28 @@ const repoStore = useRepoStore()
 
 const status = computed(() => repoStore.indexStatus)
 const indexed = computed(() => status.value?.indexed === true)
-const result = computed(() => repoStore.lastIndexResult)
+const task = computed(() => status.value?.task ?? null)
+const result = computed(() => {
+  if (task.value?.status === 'SUCCEEDED') return task.value
+  return repoStore.lastIndexResult
+})
+const taskRunning = computed(() => task.value?.status === 'QUEUED' || task.value?.status === 'RUNNING')
 
 const actionText = computed(() => (indexed.value ? '重建索引' : '建立文档索引'))
 
 function runIndex(): void {
   void repoStore.runIndex(props.repoId)
 }
+
+onBeforeUnmount(() => repoStore.invalidatePolling())
 </script>
 
 <template>
   <section class="rs-index rs-card" aria-labelledby="rs-index-title">
     <header class="rs-index__head">
       <h2 id="rs-index-title" class="rs-section-title">文档索引</h2>
-      <el-tag v-if="status" :type="indexed ? 'success' : 'info'" size="small" effect="light">
-        {{ indexed ? '已索引' : '未索引' }}
+      <el-tag v-if="status" :type="taskRunning ? 'warning' : indexed ? 'success' : 'info'" size="small" effect="light">
+        {{ taskRunning ? (task?.status === 'QUEUED' ? '排队中' : '索引进行中') : indexed ? '已索引' : '未索引' }}
       </el-tag>
     </header>
 
@@ -66,7 +73,9 @@ function runIndex(): void {
 
       <div v-if="repoStore.indexing" class="rs-index__waiting" role="status">
         <el-icon class="is-loading"><Loading /></el-icon>
-        <span>正在拉取文档并生成向量索引，首次加载模型可能需要一些时间，请保持页面打开。</span>
+        <span>
+          {{ task?.status === 'QUEUED' ? '索引任务已排队，单线程 worker 将按顺序处理。' : '索引进行中，服务端完成后页面会自动更新。' }}
+        </span>
       </div>
 
       <div class="rs-index__actions">
@@ -77,7 +86,7 @@ function runIndex(): void {
           :disabled="repoStore.indexing"
           @click="runIndex"
         >
-          {{ repoStore.indexing ? '索引进行中' : actionText }}
+          {{ repoStore.indexing ? (task?.status === 'QUEUED' ? '排队中' : '索引进行中') : actionText }}
         </el-button>
         <el-button
           text
@@ -96,7 +105,7 @@ function runIndex(): void {
         show-icon
       >
         本次索引完成：{{ result.fileCount }} 个文档、{{ result.chunkCount }} 个块，耗时
-        {{ formatCost(result.costMs) }}。
+        {{ formatCost(result.costMs ?? 0) }}。
       </el-alert>
 
       <ErrorPanel

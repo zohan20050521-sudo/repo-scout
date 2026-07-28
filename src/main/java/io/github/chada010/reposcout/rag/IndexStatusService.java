@@ -2,6 +2,7 @@ package io.github.chada010.reposcout.rag;
 
 import java.time.LocalDateTime;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import io.github.chada010.reposcout.exception.RepoNotFoundException;
@@ -14,10 +15,19 @@ public class IndexStatusService {
 
     private final RepoRepository repoRepository;
     private final DocChunkRepository docChunkRepository;
+    private final IndexJobStore indexJobStore;
 
-    public IndexStatusService(RepoRepository repoRepository, DocChunkRepository docChunkRepository) {
+    @Autowired
+    public IndexStatusService(RepoRepository repoRepository, DocChunkRepository docChunkRepository,
+                              IndexJobStore indexJobStore) {
         this.repoRepository = repoRepository;
         this.docChunkRepository = docChunkRepository;
+        this.indexJobStore = indexJobStore;
+    }
+
+    /** 兼容不需要 Redis 任务状态的旧单测构造方式。 */
+    public IndexStatusService(RepoRepository repoRepository, DocChunkRepository docChunkRepository) {
+        this(repoRepository, docChunkRepository, null);
     }
 
     public IndexStatus getStatus(long repoId) {
@@ -27,10 +37,16 @@ public class IndexStatusService {
         DocChunkRepository.IndexStatistics statistics = docChunkRepository.aggregateIndexStatistics(repoId);
         long chunkCount = statistics.getChunkCount();
         return new IndexStatus(repoId, chunkCount > 0, statistics.getFileCount(),
-                chunkCount, statistics.getIndexedAt());
+                chunkCount, statistics.getIndexedAt(),
+                indexJobStore == null ? null : indexJobStore.find(repoId).orElse(null));
     }
 
     public record IndexStatus(long repoId, boolean indexed, long fileCount,
-                              long chunkCount, LocalDateTime indexedAt) {
+                              long chunkCount, LocalDateTime indexedAt, IndexJobState task) {
+
+        public IndexStatus(long repoId, boolean indexed, long fileCount,
+                           long chunkCount, LocalDateTime indexedAt) {
+            this(repoId, indexed, fileCount, chunkCount, indexedAt, null);
+        }
     }
 }
