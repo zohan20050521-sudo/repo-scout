@@ -125,17 +125,22 @@ curl -s -X POST http://localhost:8080/api/chat \
 
 绑定语义(首绑校验存在性、冲突 400、过期需重绑)详见 [docs/api.md](docs/api.md)。
 
-### 触发文档向量化索引(v0.3)
+### 触发文档向量化索引(v0.6 异步任务)
 
 接入仓库后,可对其 README 与 `docs/` 文档做一次向量化入库(FR-3.1),供后续 RAG 检索使用。
-首次触发会加载进程内 `bge-small-zh` 量化模型(约 24MB,无外网);索引同步执行,幂等重建。
+首次触发会加载进程内 `bge-small-zh` 量化模型(约 24MB,无外网)。请求会立即返回
+`202 Accepted`,实际拉取、向量化与入库由后台单线程 worker 执行,幂等重建。
 
 ```bash
 # 对已接入仓库(<repoId> 为 POST /api/repos 返回的 id)触发向量化索引
 curl -s -X POST http://localhost:8080/api/repos/1/index
-# → {"repoId":1,"fileCount":8,"chunkCount":63,"costMs":2450}
+# → {"repoId":1,"jobId":"<uuid>","status":"QUEUED"}
 
-# 重复调用为幂等重建:doc_chunk 总数不因重复触发而增长
+# 轮询索引任务状态(也可在页面刷新后恢复显示)
+curl -s http://localhost:8080/api/repos/1/index-status
+# → {"repoId":1,"indexed":true,"fileCount":8,"chunkCount":63,"task":{"status":"SUCCEEDED",...}}
+
+# 重复提交运行中的任务会复用同一个 jobId;终态后再次调用才会建立新任务
 ```
 
 拉取范围(README + `docs/` + 扩展名白名单)与上限、切分粒度见上方 `RAG_*` 环境变量;
@@ -250,7 +255,7 @@ DEEPSEEK_API_KEY=x docker compose down -v   # 额外删除数据卷:MySQL 业务
 
 ## 项目状态
 
-✅ **v0.3.5 后端已完成，v0.4 Vue 产品前端 + Python 评测体系已完成**
+✅ **v0.6 后端已完成，v0.4 Vue 产品前端 + Python 评测体系已完成**
 
 | 版本 | 内容 | 状态 |
 | --- | --- | --- |
@@ -259,6 +264,7 @@ DEEPSEEK_API_KEY=x docker compose down -v   # 额外删除数据卷:MySQL 业务
 | v0.3 | 文档向量化 + RAG 问答、仓库分析报告 | ✅ 已完成 |
 | v0.3.5 | 公网门禁、统一接口契约、索引状态与结构化 RAG 引用 | ✅ 已完成 |
 | v0.4 | Vue 3 产品前端(接入→索引→问答→报告完整闭环)+ Python 黑盒评测体系 | ✅ 已完成 |
+| v0.6 | 异步文档索引、任务状态、重复提交去重与前端轮询恢复 | ✅ 已完成 |
 
 待处理的 backlog:注入摘录随会话记忆累积(#3)。`RAG_MIN_SCORE` 已根据当前 main 的 v1 评测数据从 `0.5` 调整为 `0.75`，Issue #4 已完成。
 

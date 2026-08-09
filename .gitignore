@@ -50,6 +50,9 @@ buildNumber.properties
 # Local Claude worktrees and agent state
 .claude/
 
+# Local agent task books, handoffs, and review records
+.agent-notes/
+
 # OS
 .DS_Store
 
