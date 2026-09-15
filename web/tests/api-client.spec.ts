@@ -51,7 +51,11 @@ describe('API 请求层', () => {
     expect(request).toHaveBeenLastCalledWith({ url: '/repos/7/index', method: 'POST' })
 
     await generateReport(7)
-    expect(request).toHaveBeenLastCalledWith({ url: '/repos/7/report', method: 'POST' })
+    expect(request).toHaveBeenLastCalledWith({
+      url: '/repos/7/report',
+      method: 'POST',
+      timeout: 180_000,
+    })
 
     await sendChat({ message: '你好', repoId: 7 })
     expect(request).toHaveBeenLastCalledWith({
